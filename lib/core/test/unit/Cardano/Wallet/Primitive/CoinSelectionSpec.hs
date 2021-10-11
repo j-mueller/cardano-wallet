@@ -101,7 +101,6 @@ import Test.QuickCheck
     , scale
     , shrink
     , shrinkList
-    , shrinkMapBy
     , (===)
     )
 import Test.QuickCheck.Extra
@@ -384,7 +383,7 @@ genMockSelectionConstraints = MockSelectionConstraints
 shrinkMockSelectionConstraints
     :: MockSelectionConstraints -> [MockSelectionConstraints]
 shrinkMockSelectionConstraints =
-    shrinkMapBy toMock unMock $ liftShrink8
+    liftShrink8 MockSelectionConstraints
         shrinkMockAssessTokenBundleSize
         shrinkCertificateDepositAmount
         shrinkMockComputeMinimumAdaQuantity
@@ -393,9 +392,6 @@ shrinkMockSelectionConstraints =
         shrinkMaximumCollateralInputCount
         shrinkMinimumCollateralPercentage
         shrinkMockUTxOSuitableForCollateral
-  where
-    unMock (MockSelectionConstraints a b c d e f g h) = (a, b, c, d, e, f, g, h)
-    toMock (a, b, c, d, e, f, g, h) = (MockSelectionConstraints a b c d e f g h)
 
 unMockSelectionConstraints :: MockSelectionConstraints -> SelectionConstraints
 unMockSelectionConstraints m = SelectionConstraints
@@ -491,7 +487,7 @@ genSelectionParams = SelectionParams
 
 shrinkSelectionParams :: SelectionParams -> [SelectionParams]
 shrinkSelectionParams =
-    shrinkMapBy ofTuple toTuple $ liftShrink9
+    liftShrink9 SelectionParams
         shrinkAssetsToBurn
         shrinkAssetsToMint
         shrinkOutputsToCover
@@ -501,9 +497,6 @@ shrinkSelectionParams =
         shrinkCollateralRequirement
         shrinkUTxOAvailableForCollateral
         shrinkUTxOAvailableForInputs
-  where
-    toTuple (SelectionParams a b c d e f g h i) = (a, b, c, d, e, f, g, h, i)
-    ofTuple (a, b, c, d, e, f, g, h, i) = (SelectionParams a b c d e f g h i)
 
 --------------------------------------------------------------------------------
 -- Assets to mint and burn

@@ -1,3 +1,8 @@
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
 -- |
@@ -48,6 +53,10 @@ module Test.QuickCheck.Extra
 
 import Prelude
 
+import Data.Generics.Internal.VL.Lens
+    ( (^.) )
+import Data.Generics.Product.Positions
+    ( HasPosition', position' )
 import Data.IntCast
     ( intCast, intCastMaybe )
 import Data.Map.Strict
@@ -245,7 +254,9 @@ liftShrink7 s1 s2 s3 s4 s5 s6 s7 (a1, a2, a3, a4, a5, a6, a7) =
 -- | Similar to 'liftShrink2', but applicable to 8-tuples.
 --
 liftShrink8
-    :: (a1 -> [a1])
+    :: HasFields8 r a1 a2 a3 a4 a5 a6 a7 a8
+    => (a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> a8 -> r)
+    -> (a1 -> [a1])
     -> (a2 -> [a2])
     -> (a3 -> [a3])
     -> (a4 -> [a4])
@@ -253,24 +264,28 @@ liftShrink8
     -> (a6 -> [a6])
     -> (a7 -> [a7])
     -> (a8 -> [a8])
-    -> (a1, a2, a3, a4, a5, a6, a7, a8)
-    -> [(a1, a2, a3, a4, a5, a6, a7, a8)]
-liftShrink8 s1 s2 s3 s4 s5 s6 s7 s8 (a1, a2, a3, a4, a5, a6, a7, a8) =
+    -> r
+    -> [r]
+liftShrink8 f s1 s2 s3 s4 s5 s6 s7 s8 r =
     interleaveRoundRobin
-    [ [ (a1', a2 , a3 , a4 , a5 , a6 , a7 , a8 ) | a1' <- s1 a1 ]
-    , [ (a1 , a2', a3 , a4 , a5 , a6 , a7 , a8 ) | a2' <- s2 a2 ]
-    , [ (a1 , a2 , a3', a4 , a5 , a6 , a7 , a8 ) | a3' <- s3 a3 ]
-    , [ (a1 , a2 , a3 , a4', a5 , a6 , a7 , a8 ) | a4' <- s4 a4 ]
-    , [ (a1 , a2 , a3 , a4 , a5', a6 , a7 , a8 ) | a5' <- s5 a5 ]
-    , [ (a1 , a2 , a3 , a4 , a5 , a6', a7 , a8 ) | a6' <- s6 a6 ]
-    , [ (a1 , a2 , a3 , a4 , a5 , a6 , a7', a8 ) | a7' <- s7 a7 ]
-    , [ (a1 , a2 , a3 , a4 , a5 , a6 , a7 , a8') | a8' <- s8 a8 ]
+    [ [ f a1' a2  a3  a4  a5  a6  a7  a8  | a1' <- s1 a1 ]
+    , [ f a1  a2' a3  a4  a5  a6  a7  a8  | a2' <- s2 a2 ]
+    , [ f a1  a2  a3' a4  a5  a6  a7  a8  | a3' <- s3 a3 ]
+    , [ f a1  a2  a3  a4' a5  a6  a7  a8  | a4' <- s4 a4 ]
+    , [ f a1  a2  a3  a4  a5' a6  a7  a8  | a5' <- s5 a5 ]
+    , [ f a1  a2  a3  a4  a5  a6' a7  a8  | a6' <- s6 a6 ]
+    , [ f a1  a2  a3  a4  a5  a6  a7' a8  | a7' <- s7 a7 ]
+    , [ f a1  a2  a3  a4  a5  a6  a7  a8' | a8' <- s8 a8 ]
     ]
+  where
+    (a1, a2, a3, a4, a5, a6, a7, a8) = toTuple8 r
 
 -- | Similar to 'liftShrink2', but applicable to 9-tuples.
 --
 liftShrink9
-    :: (a1 -> [a1])
+    :: HasFields9 r a1 a2 a3 a4 a5 a6 a7 a8 a9
+    => (a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> a8 -> a9 -> r)
+    -> (a1 -> [a1])
     -> (a2 -> [a2])
     -> (a3 -> [a3])
     -> (a4 -> [a4])
@@ -279,20 +294,22 @@ liftShrink9
     -> (a7 -> [a7])
     -> (a8 -> [a8])
     -> (a9 -> [a9])
-    -> (a1, a2, a3, a4, a5, a6, a7, a8, a9)
-    -> [(a1, a2, a3, a4, a5, a6, a7, a8, a9)]
-liftShrink9 s1 s2 s3 s4 s5 s6 s7 s8 s9 (a1, a2, a3, a4, a5, a6, a7, a8, a9) =
+    -> r
+    -> [r]
+liftShrink9 f s1 s2 s3 s4 s5 s6 s7 s8 s9 r =
     interleaveRoundRobin
-    [ [ (a1', a2 , a3 , a4 , a5 , a6 , a7 , a8 , a9 ) | a1' <- s1 a1 ]
-    , [ (a1 , a2', a3 , a4 , a5 , a6 , a7 , a8 , a9 ) | a2' <- s2 a2 ]
-    , [ (a1 , a2 , a3', a4 , a5 , a6 , a7 , a8 , a9 ) | a3' <- s3 a3 ]
-    , [ (a1 , a2 , a3 , a4', a5 , a6 , a7 , a8 , a9 ) | a4' <- s4 a4 ]
-    , [ (a1 , a2 , a3 , a4 , a5', a6 , a7 , a8 , a9 ) | a5' <- s5 a5 ]
-    , [ (a1 , a2 , a3 , a4 , a5 , a6', a7 , a8 , a9 ) | a6' <- s6 a6 ]
-    , [ (a1 , a2 , a3 , a4 , a5 , a6 , a7', a8 , a9 ) | a7' <- s7 a7 ]
-    , [ (a1 , a2 , a3 , a4 , a5 , a6 , a7 , a8', a9 ) | a8' <- s8 a8 ]
-    , [ (a1 , a2 , a3 , a4 , a5 , a6 , a7 , a8 , a9') | a9' <- s9 a9 ]
+    [ [ f a1' a2  a3  a4  a5  a6  a7  a8  a9  | a1' <- s1 a1 ]
+    , [ f a1  a2' a3  a4  a5  a6  a7  a8  a9  | a2' <- s2 a2 ]
+    , [ f a1  a2  a3' a4  a5  a6  a7  a8  a9  | a3' <- s3 a3 ]
+    , [ f a1  a2  a3  a4' a5  a6  a7  a8  a9  | a4' <- s4 a4 ]
+    , [ f a1  a2  a3  a4  a5' a6  a7  a8  a9  | a5' <- s5 a5 ]
+    , [ f a1  a2  a3  a4  a5  a6' a7  a8  a9  | a6' <- s6 a6 ]
+    , [ f a1  a2  a3  a4  a5  a6  a7' a8  a9  | a7' <- s7 a7 ]
+    , [ f a1  a2  a3  a4  a5  a6  a7  a8' a9  | a8' <- s8 a8 ]
+    , [ f a1  a2  a3  a4  a5  a6  a7  a8  a9' | a9' <- s9 a9 ]
     ]
+  where
+    (a1, a2, a3, a4, a5, a6, a7, a8, a9) = toTuple9 r
 
 -- Interleaves the given lists together in round-robin order.
 --
@@ -419,3 +436,77 @@ newtype NotNull a = NotNull { unNotNull :: a }
 instance (Arbitrary a, Eq a, Monoid a) => Arbitrary (NotNull a) where
     arbitrary = NotNull <$> arbitrary `suchThat` (/= mempty)
     shrink (NotNull u) = NotNull <$> filter (/= mempty) (shrink u)
+
+--------------------------------------------------------------------------------
+-- Generic constraints
+--------------------------------------------------------------------------------
+
+type HasFields1 r a =
+    (HasPosition' 1 r a)
+
+type HasFields2 r a b =
+    (HasFields1 r a, HasPosition' 2 r b)
+
+type HasFields3 r a b c =
+    (HasFields2 r a b, HasPosition' 3 r c)
+
+type HasFields4 r a b c d =
+    (HasFields3 r a b c, HasPosition' 4 r d)
+
+type HasFields5 r a b c d e =
+    (HasFields4 r a b c d, HasPosition' 5 r e)
+
+type HasFields6 r a b c d e f =
+    (HasFields5 r a b c d e, HasPosition' 6 r f)
+
+type HasFields7 r a b c d e f g =
+    (HasFields6 r a b c d e f, HasPosition' 7 r g)
+
+type HasFields8 r a b c d e f g h =
+    (HasFields7 r a b c d e f g, HasPosition' 8 r h)
+
+type HasFields9 r a b c d e f g h i =
+    (HasFields8 r a b c d e f g h, HasPosition' 9 r i)
+
+toTuple1 :: HasFields1 r a => r -> (a)
+toTuple1 r = (r ^. position' @1)
+
+toTuple2 :: HasFields2 r a b => r -> (a, b)
+toTuple2 r = (a, r ^. position' @2)
+  where
+    (a) = toTuple1 r
+
+toTuple3 :: HasFields3 r a b c => r -> (a, b, c)
+toTuple3 r = (a, b, r ^. position' @3)
+  where
+    (a, b) = toTuple2 r
+
+toTuple4 :: HasFields4 r a b c d => r -> (a, b, c, d)
+toTuple4 r = (a, b, c, r ^. position' @4)
+  where
+    (a, b, c) = toTuple3 r
+
+toTuple5 :: HasFields5 r a b c d e => r -> (a, b, c, d, e)
+toTuple5 r = (a, b, c, d, r ^. position' @5)
+  where
+    (a, b, c, d) = toTuple4 r
+
+toTuple6 :: HasFields6 r a b c d e f => r -> (a, b, c, d, e, f)
+toTuple6 r = (a, b, c, d, e, r ^. position' @6)
+  where
+    (a, b, c, d, e) = toTuple5 r
+
+toTuple7 :: HasFields7 r a b c d e f g => r -> (a, b, c, d, e, f, g)
+toTuple7 r = (a, b, c, d, e, f, r ^. position' @7)
+  where
+    (a, b, c, d, e, f) = toTuple6 r
+
+toTuple8 :: HasFields8 r a b c d e f g h => r -> (a, b, c, d, e, f, g, h)
+toTuple8 r = (a, b, c, d, e, f, g, r ^. position' @8)
+  where
+    (a, b, c, d, e, f, g) = toTuple7 r
+
+toTuple9 :: HasFields9 r a b c d e f g h i => r -> (a, b, c, d, e, f, g, h, i)
+toTuple9 r = (a, b, c, d, e, f, g, h, r ^. position' @9)
+  where
+    (a, b, c, d, e, f, g, h) = toTuple8 r
