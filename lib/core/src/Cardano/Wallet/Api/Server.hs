@@ -2437,7 +2437,7 @@ decodeTransaction ctx _wid (ApiSerialisedTransaction (ApiT sealed)) = do
         , collateral = map toInp colls
         , withdrawals = map toWrdl $ Map.assocs wdrlMap
         , metadata = ApiTxMetadata $ ApiT <$> meta
-        , scriptValidity = Nothing
+        , scriptValidity = ApiT <$> vldt
         }
   where
     tl = ctx ^. W.transactionLayer @k
