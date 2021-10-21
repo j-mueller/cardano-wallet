@@ -26,6 +26,11 @@ module Cardano.Api.Gen
   , genScriptInAnyLang
   , genScriptInEra
   , genScriptHash
+
+  , genAssetName
+  , genAlphaNum
+  , genPolicyId
+  , genAssetId
   ) where
 
 import Prelude
@@ -36,6 +41,8 @@ import Cardano.Api.Shelley
     ( PlutusScript (..) )
 import Data.Maybe
     ( maybeToList )
+import Data.String
+    ( fromString )
 import Data.Word
     ( Word64 )
 import Test.Cardano.Crypto.Gen
@@ -53,6 +60,7 @@ import Test.QuickCheck
     , scale
     , sized
     , vector
+    , vectorOf
     )
 
 import qualified Cardano.Binary as CBOR
@@ -236,3 +244,36 @@ genScriptHash :: Gen ScriptHash
 genScriptHash = do
     ScriptInAnyLang _ script <- genScriptInAnyLang
     return (hashScript script)
+
+genAssetName :: Gen AssetName
+genAssetName =
+  frequency
+    -- mostly from a small number of choices, so we get plenty of repetition
+    [ (9, elements ["", "a", "b", "c"])
+    , (1, AssetName <$> fromString <$> (vectorOf 32 genAlphaNum))
+    , (1, AssetName <$> fromString <$> (
+              scale (\n -> (n `mod` 31) + 1)
+                  (listOf genAlphaNum)
+              )
+      )
+    ]
+
+genAlphaNum :: Gen Char
+genAlphaNum = elements
+    "abcdefghiklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+genPolicyId :: Gen PolicyId
+genPolicyId =
+  frequency
+      -- mostly from a small number of choices, so we get plenty of repetition
+    [ (9, elements [ fromString (x : replicate 55 '0') | x <- ['a'..'c'] ])
+
+       -- and some from the full range of the type
+    , (1, PolicyId <$> genScriptHash)
+    ]
+
+genAssetId :: Gen AssetId
+genAssetId = oneof
+    [ AssetId <$> genPolicyId <*> genAssetName
+    , return AdaAssetId
+    ]

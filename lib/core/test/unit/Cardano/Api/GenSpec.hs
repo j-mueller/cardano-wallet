@@ -7,7 +7,9 @@ module Cardano.Api.GenSpec (spec) where
 import Prelude
 
 import Cardano.Api
-    ( CardanoEra (..)
+    ( AssetId (..)
+    , AssetName (..)
+    , CardanoEra (..)
     , Lovelace
     , ScriptValidity (..)
     , SimpleScript (..)
@@ -29,6 +31,8 @@ import Cardano.Api
     , validityUpperBoundSupportedInEra
     )
 import Cardano.Api.Gen
+import Data.Char
+    ( isAlphaNum, isDigit, isLower, isUpper )
 import Data.Function
     ( (&) )
 import Data.Word
@@ -46,6 +50,9 @@ import Test.QuickCheck
     , label
     , property
     )
+
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as B8
 
 spec :: Spec
 spec =
@@ -214,6 +221,12 @@ spec =
                 property genSimpleScriptCoverageV1
             it "genSimpleScriptV2" $
                 property genSimpleScriptCoverageV2
+            it "genAssetName" $
+                property genAssetNameCoverage
+            it "genAlphaNum" $
+                property genAlphaNumCoverage
+            it "genAssetId" $
+                property genAssetIdCoverage
 
 genTxIxCoverage :: TxIx -> Property
 genTxIxCoverage (TxIx ix) = unsignedCoverage "txIx" ix
@@ -513,6 +526,56 @@ requiresMOf = \case
     (RequireAllOf ss)       -> any requiresMOf ss
     (RequireAnyOf ss)       -> any requiresMOf ss
     (RequireMOf _ _)        -> True
+
+genAssetNameCoverage :: AssetName -> Property
+genAssetNameCoverage n = checkCoverage
+    $ cover 1 (assetNameLen == 0)
+        "asset name is empty"
+    $ cover 10 (assetNameLen == shortLength)
+        "asset name is short"
+    $ cover 5 (assetNameLen == longLength)
+        "asset name is long"
+    $ cover 5 (assetNameLen > shortLength && assetNameLen < longLength)
+        "asset name is between short and long"
+    $ label "is alphanumeric" (all isAlphaNum assetNameStr)
+      & counterexample "character wasn't alphabetic or numeric"
+    where
+        assetNameStr = (\(AssetName n') -> B8.unpack n') $ n
+        assetNameLen = (\(AssetName n') -> BS.length n') $ n
+        shortLength = 1
+        longLength = 32
+
+instance Arbitrary AssetName where
+    arbitrary = genAssetName
+
+genAlphaNumCoverage :: Property
+genAlphaNumCoverage = forAll genAlphaNum $ \c ->
+    checkCoverage
+    $ cover 10 (isDigit c)
+        "character is digit"
+    $ cover 10 (isUpper c)
+        "character is upper-case alphabetic"
+    $ cover 10 (isLower c)
+        "character is lower-case alphabetic"
+    $ label "character is alphabetic or numeric" (isAlphaNum c)
+      & counterexample "character wasn't alphabetic or numeric"
+
+genAssetIdCoverage :: AssetId -> Property
+genAssetIdCoverage assetId = checkCoverage
+    $ cover 10 (isAdaAssetId assetId)
+        "ADA asset id"
+    $ cover 10 (isNonAdaAssetId assetId)
+        "non-ADA asset id"
+    $ True
+
+    where
+        isAdaAssetId = (== AdaAssetId)
+
+        isNonAdaAssetId AdaAssetId    = False
+        isNonAdaAssetId (AssetId _ _) = True
+
+instance Arbitrary AssetId where
+    arbitrary = genAssetId
 
 unsignedCoverage
     :: ( Num a
