@@ -22,6 +22,10 @@ module Cardano.Api.Gen
   , genExtraKeyWitnesses
   , genSimpleScript
   , genPlutusScript
+  , genScript
+  , genScriptInAnyLang
+  , genScriptInEra
+  , genScriptHash
   ) where
 
 import Prelude
@@ -209,3 +213,26 @@ genSimpleScript lang =
         (Positive m) <- arbitrary
         genTerm (n `div` (m + 3))
 
+genScript :: ScriptLanguage lang -> Gen (Script lang)
+genScript (SimpleScriptLanguage lang) =
+    SimpleScript lang <$> genSimpleScript lang
+genScript (PlutusScriptLanguage lang) =
+    PlutusScript lang <$> genPlutusScript lang
+
+genScriptInAnyLang :: Gen ScriptInAnyLang
+genScriptInAnyLang =
+    oneof
+      [ ScriptInAnyLang lang <$> genScript lang
+      | AnyScriptLanguage lang <- [minBound..maxBound] ]
+
+genScriptInEra :: CardanoEra era -> Gen (ScriptInEra era)
+genScriptInEra era =
+    oneof
+      [ ScriptInEra langInEra <$> genScript lang
+      | AnyScriptLanguage lang <- [minBound..maxBound]
+      , Just langInEra <- [scriptLanguageSupportedInEra era lang] ]
+
+genScriptHash :: Gen ScriptHash
+genScriptHash = do
+    ScriptInAnyLang _ script <- genScriptInAnyLang
+    return (hashScript script)
