@@ -9,6 +9,10 @@ module Cardano.Api.Gen
   , genSlotNo
   , genLovelace
   , genTxFee
+  , genTtl
+  , genTxValidityLowerBound
+  , genTxValidityUpperBound
+  , genTxValidityRange
   ) where
 
 import Prelude
@@ -63,3 +67,32 @@ genTxFee era =
     Left  implicit -> pure (TxFeeImplicit implicit)
     Right explicit -> TxFeeExplicit explicit <$> genLovelace
 
+genTtl :: Gen SlotNo
+genTtl = genSlotNo
+
+genTxValidityLowerBound :: CardanoEra era -> Gen (TxValidityLowerBound era)
+genTxValidityLowerBound era =
+  case validityLowerBoundSupportedInEra era of
+    Nothing        -> pure TxValidityNoLowerBound
+    Just supported -> TxValidityLowerBound supported <$> genTtl
+
+genTxValidityUpperBound :: CardanoEra era -> Gen (TxValidityUpperBound era)
+genTxValidityUpperBound era =
+  case (validityUpperBoundSupportedInEra era,
+       validityNoUpperBoundSupportedInEra era) of
+    (Just supported, _) ->
+      TxValidityUpperBound supported <$> genTtl
+
+    (Nothing, Just supported) ->
+      pure (TxValidityNoUpperBound supported)
+
+    (Nothing, Nothing) ->
+      error "genTxValidityUpperBound: unexpected era support combination"
+
+genTxValidityRange
+  :: CardanoEra era
+  -> Gen (TxValidityLowerBound era, TxValidityUpperBound era)
+genTxValidityRange era =
+  (,)
+    <$> genTxValidityLowerBound era
+    <*> genTxValidityUpperBound era

@@ -7,14 +7,18 @@ import Prelude
 
 import Cardano.Api
     ( CardanoEra (..)
-    , Lovelace (..)
+    , Lovelace
     , SlotNo (..)
     , TxFee (..)
     , TxIn (..)
     , TxInsCollateral (..)
     , TxIx (..)
+    , TxValidityLowerBound (..)
+    , TxValidityUpperBound (..)
     , collateralSupportedInEra
     , txFeesExplicitInEra
+    , validityLowerBoundSupportedInEra
+    , validityUpperBoundSupportedInEra
     )
 import Cardano.Api.Gen
 import Data.Function
@@ -24,10 +28,10 @@ import Data.Word
 import Test.Hspec
 import Test.QuickCheck
     ( Arbitrary
-    , Gen
     , Property
     , arbitrary
     , checkCoverage
+    , conjoin
     , counterexample
     , cover
     , forAll
@@ -85,7 +89,75 @@ spec =
                     property
                     $ forAll (genTxFee MaryEra)
                     $ genTxFeeCoverage MaryEra
-
+                it "AlonzoEra" $
+                    property
+                    $ forAll (genTxFee AlonzoEra)
+                    $ genTxFeeCoverage AlonzoEra
+            it "genTtl" $
+                property genTtlCoverage
+            describe "genTxValidityLowerBound" $ do
+                it "ByronEra" $
+                    property
+                    $ forAll (genTxValidityLowerBound ByronEra)
+                    $ genTxValidityLowerBoundCoverage ByronEra
+                it "ShelleyEra" $
+                    property
+                    $ forAll (genTxValidityLowerBound ShelleyEra)
+                    $ genTxValidityLowerBoundCoverage ShelleyEra
+                it "AllegraEra" $
+                    property
+                    $ forAll (genTxValidityLowerBound AllegraEra)
+                    $ genTxValidityLowerBoundCoverage AllegraEra
+                it "MaryEra" $
+                    property
+                    $ forAll (genTxValidityLowerBound MaryEra)
+                    $ genTxValidityLowerBoundCoverage MaryEra
+                it "AlonzoEra" $
+                    property
+                    $ forAll (genTxValidityLowerBound AlonzoEra)
+                    $ genTxValidityLowerBoundCoverage AlonzoEra
+            describe "genTxValidityUpperBound" $ do
+                it "ByronEra" $
+                    property
+                    $ forAll (genTxValidityUpperBound ByronEra)
+                    $ genTxValidityUpperBoundCoverage ByronEra
+                it "ShelleyEra" $
+                    property
+                    $ forAll (genTxValidityUpperBound ShelleyEra)
+                    $ genTxValidityUpperBoundCoverage ShelleyEra
+                it "AllegraEra" $
+                    property
+                    $ forAll (genTxValidityUpperBound AllegraEra)
+                    $ genTxValidityUpperBoundCoverage AllegraEra
+                it "MaryEra" $
+                    property
+                    $ forAll (genTxValidityUpperBound MaryEra)
+                    $ genTxValidityUpperBoundCoverage MaryEra
+                it "AlonzoEra" $
+                    property
+                    $ forAll (genTxValidityUpperBound AlonzoEra)
+                    $ genTxValidityUpperBoundCoverage AlonzoEra
+            describe "genTxValidityRangeBound" $ do
+                it "ByronEra" $
+                    property
+                    $ forAll (genTxValidityRange ByronEra)
+                    $ genTxValidityRangeCoverage ByronEra
+                it "ShelleyEra" $
+                    property
+                    $ forAll (genTxValidityRange ShelleyEra)
+                    $ genTxValidityRangeCoverage ShelleyEra
+                it "AllegraEra" $
+                    property
+                    $ forAll (genTxValidityRange AllegraEra)
+                    $ genTxValidityRangeCoverage AllegraEra
+                it "MaryEra" $
+                    property
+                    $ forAll (genTxValidityRange MaryEra)
+                    $ genTxValidityRangeCoverage MaryEra
+                it "AlonzoEra" $
+                    property
+                    $ forAll (genTxValidityRange AlonzoEra)
+                    $ genTxValidityRangeCoverage AlonzoEra
 
 genTxIxCoverage :: TxIx -> Property
 genTxIxCoverage (TxIx ix) = unsignedCoverage "txIx" ix
@@ -156,12 +228,74 @@ genTxFeeCoverage era fee =
                               <> show era
                               <> " wasn't implicit but should be"
                              )
-        Right explicit ->
+        Right _ ->
             case fee of
                 TxFeeImplicit _ ->
                     error "fees are explicit in era but received implicit fee"
-                TxFeeExplicit _ fee ->
-                    genLovelaceCoverage fee
+                TxFeeExplicit _ l ->
+                    genLovelaceCoverage l
+
+genTtlCoverage :: SlotNo -> Property
+genTtlCoverage = genSlotNoCoverage
+
+genTxValidityLowerBoundCoverage
+    :: CardanoEra era -> TxValidityLowerBound era -> Property
+genTxValidityLowerBoundCoverage era validFrom =
+    case validityLowerBoundSupportedInEra era of
+        Nothing ->
+            validFrom == TxValidityNoLowerBound
+            & label ("validity lower bound not supported in " <> show era)
+            & counterexample ( "validity lower bound shouldn't be supported in "
+                              <> show era
+                             )
+        Just _ ->
+            case validFrom of
+                TxValidityNoLowerBound ->
+                    False
+                    & counterexample ( "validity lower bound supported in "
+                                       <> show era
+                                       <> ", should have lower bound")
+                TxValidityLowerBound _ ttl ->
+                    genTtlCoverage ttl
+
+genTxValidityUpperBoundCoverage
+    :: CardanoEra era -> TxValidityUpperBound era -> Property
+genTxValidityUpperBoundCoverage era validFrom =
+    case validityUpperBoundSupportedInEra era of
+        Nothing ->
+            case validFrom of
+                (TxValidityNoUpperBound _) ->
+                    True
+                    & label ( "validity upper bound not supported in "
+                              <> show era
+                            )
+                    & counterexample
+                        ( "validity upper bound shouldn't be supported in "
+                          <> show era
+                        )
+                (TxValidityUpperBound _ _) ->
+                    error ( "validity upper bound not supported in "
+                           <> show era
+                           <> ", no upper bound should be generated."
+                          )
+        Just _ ->
+            case validFrom of
+                TxValidityNoUpperBound _ ->
+                    False
+                    & counterexample ( "validity upper bound supported in "
+                                       <> show era
+                                       <> ", should have upper bound")
+                TxValidityUpperBound _ ttl ->
+                    genTtlCoverage ttl
+
+genTxValidityRangeCoverage
+    :: CardanoEra era
+    -> (TxValidityLowerBound era, TxValidityUpperBound era)
+    -> Property
+genTxValidityRangeCoverage era (lower, upper) = conjoin
+    [ genTxValidityLowerBoundCoverage era lower
+    , genTxValidityUpperBoundCoverage era upper
+    ]
 
 unsignedCoverage
     :: ( Num a
