@@ -13,6 +13,13 @@ module Cardano.Api.Gen
   , genTxValidityLowerBound
   , genTxValidityUpperBound
   , genTxValidityRange
+  , genTxScriptValidity
+  , genScriptValidity
+  , genSeed
+  , genSigningKey
+  , genVerificationKey
+  , genVerificationKeyHash
+  , genExtraKeyWitnesses
   ) where
 
 import Prelude
@@ -22,10 +29,12 @@ import Cardano.Api hiding
 import Data.Word
     ( Word64 )
 import Test.QuickCheck
-    ( Gen, Large (..), arbitrary, listOf, oneof )
+    ( Gen, Large (..), arbitrary, elements, listOf, oneof, vector )
 
 import qualified Cardano.Binary as CBOR
 import qualified Cardano.Crypto.Hash as Crypto
+import qualified Cardano.Crypto.Seed as Crypto
+import qualified Data.ByteString as BS
 import qualified Shelley.Spec.Ledger.TxBody as Ledger
     ( EraIndependentTxBody )
 
@@ -96,3 +105,45 @@ genTxValidityRange era =
   (,)
     <$> genTxValidityLowerBound era
     <*> genTxValidityUpperBound era
+
+genTxScriptValidity :: CardanoEra era -> Gen (TxScriptValidity era)
+genTxScriptValidity era = case txScriptValiditySupportedInCardanoEra era of
+  Nothing -> pure TxScriptValidityNone
+  Just witness -> TxScriptValidity witness <$> genScriptValidity
+
+genScriptValidity :: Gen ScriptValidity
+genScriptValidity = elements [ScriptInvalid, ScriptValid]
+
+genSeed :: Int -> Gen Crypto.Seed
+genSeed n = (Crypto.mkSeedFromBytes . BS.pack) <$> vector n
+
+genSigningKey :: Key keyrole => AsType keyrole -> Gen (SigningKey keyrole)
+genSigningKey roletoken = do
+    seed <- genSeed (fromIntegral seedSize)
+    let sk = deterministicSigningKey roletoken seed
+    return sk
+
+    where
+        seedSize :: Word
+        seedSize = deterministicSigningKeySeedSize roletoken
+
+genVerificationKey
+    :: Key keyrole
+    => AsType keyrole
+    -> Gen (VerificationKey keyrole)
+genVerificationKey roletoken = getVerificationKey <$> genSigningKey roletoken
+
+genVerificationKeyHash :: Key keyrole => AsType keyrole -> Gen (Hash keyrole)
+genVerificationKeyHash roletoken =
+  verificationKeyHash <$> genVerificationKey roletoken
+
+genExtraKeyWitnesses :: CardanoEra era -> Gen (TxExtraKeyWitnesses era)
+genExtraKeyWitnesses era =
+    case extraKeyWitnessesSupportedInEra era of
+        Nothing -> pure TxExtraKeyWitnessesNone
+        Just supported  -> oneof
+            [ pure TxExtraKeyWitnessesNone
+            , TxExtraKeyWitnesses supported
+              <$> listOf (genVerificationKeyHash AsPaymentKey)
+            ]
+

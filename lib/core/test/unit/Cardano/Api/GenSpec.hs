@@ -8,15 +8,20 @@ import Prelude
 import Cardano.Api
     ( CardanoEra (..)
     , Lovelace
+    , ScriptValidity (..)
     , SlotNo (..)
+    , TxExtraKeyWitnesses (..)
     , TxFee (..)
     , TxIn (..)
     , TxInsCollateral (..)
     , TxIx (..)
+    , TxScriptValidity (..)
     , TxValidityLowerBound (..)
     , TxValidityUpperBound (..)
     , collateralSupportedInEra
+    , extraKeyWitnessesSupportedInEra
     , txFeesExplicitInEra
+    , txScriptValiditySupportedInCardanoEra
     , validityLowerBoundSupportedInEra
     , validityUpperBoundSupportedInEra
     )
@@ -158,6 +163,50 @@ spec =
                     property
                     $ forAll (genTxValidityRange AlonzoEra)
                     $ genTxValidityRangeCoverage AlonzoEra
+            it "genScriptValidity" $
+                property genScriptValidityCoverage
+            describe "genTxScriptValidity" $ do
+                it "ByronEra" $
+                    property
+                    $ forAll (genTxScriptValidity ByronEra)
+                    $ genTxScriptValidityCoverage ByronEra
+                it "ShelleyEra" $
+                    property
+                    $ forAll (genTxScriptValidity ShelleyEra)
+                    $ genTxScriptValidityCoverage ShelleyEra
+                it "AllegraEra" $
+                    property
+                    $ forAll (genTxScriptValidity AllegraEra)
+                    $ genTxScriptValidityCoverage AllegraEra
+                it "MaryEra" $
+                    property
+                    $ forAll (genTxScriptValidity MaryEra)
+                    $ genTxScriptValidityCoverage MaryEra
+                it "AlonzoEra" $
+                    property
+                    $ forAll (genTxScriptValidity AlonzoEra)
+                    $ genTxScriptValidityCoverage AlonzoEra
+            describe "genExtraKeyWitnesses" $ do
+                it "ByronEra" $
+                    property
+                    $ forAll (genExtraKeyWitnesses ByronEra)
+                    $ genExtraKeyWitnessesCoverage ByronEra
+                it "ShelleyEra" $
+                    property
+                    $ forAll (genExtraKeyWitnesses ShelleyEra)
+                    $ genExtraKeyWitnessesCoverage ShelleyEra
+                it "AllegraEra" $
+                    property
+                    $ forAll (genExtraKeyWitnesses AllegraEra)
+                    $ genExtraKeyWitnessesCoverage AllegraEra
+                it "MaryEra" $
+                    property
+                    $ forAll (genExtraKeyWitnesses MaryEra)
+                    $ genExtraKeyWitnessesCoverage MaryEra
+                it "AlonzoEra" $
+                    property
+                    $ forAll (genExtraKeyWitnesses AlonzoEra)
+                    $ genExtraKeyWitnessesCoverage AlonzoEra
 
 genTxIxCoverage :: TxIx -> Property
 genTxIxCoverage (TxIx ix) = unsignedCoverage "txIx" ix
@@ -178,7 +227,7 @@ genTxInCollateralCoverage :: CardanoEra era -> TxInsCollateral era -> Property
 genTxInCollateralCoverage era collateral =
     case collateralSupportedInEra era of
         Nothing ->
-            (collateral == TxInsCollateralNone)
+            collateral == TxInsCollateralNone
             & label ("collateral is never generated in " <> show era)
             & counterexample ("collateral was generated in " <> show era)
         Just _ ->
@@ -296,6 +345,67 @@ genTxValidityRangeCoverage era (lower, upper) = conjoin
     [ genTxValidityLowerBoundCoverage era lower
     , genTxValidityUpperBoundCoverage era upper
     ]
+
+genScriptValidityCoverage :: ScriptValidity -> Property
+genScriptValidityCoverage scriptValidity = checkCoverage
+    $ cover 40 (scriptValidity == ScriptInvalid)
+        "script is invalid"
+    $ cover 40 (scriptValidity == ScriptValid)
+        "script is valid"
+    $ True
+
+instance Arbitrary ScriptValidity where
+    arbitrary = genScriptValidity
+
+genTxScriptValidityCoverage :: CardanoEra era -> TxScriptValidity era -> Property
+genTxScriptValidityCoverage era txScriptValidity =
+    case txScriptValiditySupportedInCardanoEra era of
+        Nothing ->
+            txScriptValidity == TxScriptValidityNone
+            & label "script validity is always none in eras it is not supported"
+            & counterexample
+                ("script validity was generated in unsupported " <> show era)
+        Just _  ->
+            case txScriptValidity of
+                TxScriptValidityNone ->
+                    False
+                    & counterexample
+                        (show era <> "era should have script validity")
+                TxScriptValidity _ scriptValidity ->
+                    genScriptValidityCoverage scriptValidity
+
+genExtraKeyWitnessesCoverage
+    :: CardanoEra era -> TxExtraKeyWitnesses era -> Property
+genExtraKeyWitnessesCoverage era ws =
+    case extraKeyWitnessesSupportedInEra era of
+        Nothing ->
+            label "extra key witnesses are not generated in unsupported eras"
+                (noWitnesses ws)
+            & counterexample ( "key witnesses were generated in unsupported "
+                               <> show era
+                             )
+        Just _ -> checkCoverage
+            $ cover 10 (noWitnesses ws)
+                "no witnesses"
+            $ cover 10 (witnesses ws)
+                "witnesses"
+            $ case ws of
+                TxExtraKeyWitnessesNone -> property True
+                (TxExtraKeyWitnesses _ wits) -> checkCoverage
+                    $ cover 1 (null wits)
+                       "empty witneses"
+                    $ cover 30 (not (null wits))
+                       "some witnesses"
+                    $ cover 10 (length wits > 3)
+                       "> 3 witnesses"
+                    $ True
+
+    where
+        noWitnesses = (== TxExtraKeyWitnessesNone)
+
+        witnesses = \case
+            TxExtraKeyWitnessesNone -> False
+            TxExtraKeyWitnesses _ _ -> True
 
 unsignedCoverage
     :: ( Num a
