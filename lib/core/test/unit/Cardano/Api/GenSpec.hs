@@ -359,7 +359,7 @@ genScriptValidityCoverage scriptValidity = checkCoverage
         "script is invalid"
     $ cover 40 (scriptValidity == ScriptValid)
         "script is valid"
-    $ True
+        True
 
 instance Arbitrary ScriptValidity where
     arbitrary = genScriptValidity
@@ -392,20 +392,14 @@ genExtraKeyWitnessesCoverage era ws =
                                <> show era
                              )
         Just _ -> checkCoverage
-            $ cover 10 (noWitnesses ws)
-                "no witnesses"
-            $ cover 10 (witnesses ws)
-                "witnesses"
+            $ cover 10 (noWitnesses ws) "no witnesses"
+            $ cover 10 (witnesses ws) "witnesses"
             $ case ws of
                 TxExtraKeyWitnessesNone -> property True
                 (TxExtraKeyWitnesses _ wits) -> checkCoverage
-                    $ cover 1 (null wits)
-                       "empty witneses"
-                    $ cover 30 (not (null wits))
-                       "some witnesses"
-                    $ cover 10 (length wits > 3)
-                       "> 3 witnesses"
-                    $ True
+                    $ cover 1 (null wits) "empty witneses"
+                    $ cover 30 (not (null wits)) "some witnesses"
+                    $ cover 10 (length wits > 3) "> 3 witnesses" True
 
     where
         noWitnesses = (== TxExtraKeyWitnessesNone)
@@ -419,40 +413,40 @@ genSimpleScriptCoverageV1 =
     forAll (genSimpleScript SimpleScriptV1) $ \script ->
     checkCoverage
     $ cover 10 (requiresSignature script)
-       "script has \"require signature\""
+        "script has \"require signature\""
     $ cover 10 (requiresAllOf script)
-       "script has \"require all of\""
+        "script has \"require all of\""
     $ cover 10 (requiresAnyOf script)
-       "script has \"require any of\""
+        "script has \"require any of\""
     $ cover 10 (requiresMOf script)
-       "script has \"require M of\""
+        "script has \"require M of\""
     $ cover 10 (hasOnlyNonRecursiveScriptPrimitive script)
-       "script has only non-recursive script primitives (sig, timeBefore, timeAfter)"
+        "script has only non-recursive script primitives (sig, timeBefore, timeAfter)"
     $ cover 10 (not (hasOnlyNonRecursiveScriptPrimitive script))
-       "script has recursive script primitives (allOf, anyOf, mOf)"
-    $ True
+        "script has recursive script primitives (allOf, anyOf, mOf)"
+        True
 
 genSimpleScriptCoverageV2 :: Property
 genSimpleScriptCoverageV2 =
     forAll (genSimpleScript SimpleScriptV2) $ \script ->
     checkCoverage
     $ cover 10 (requiresSignature script)
-       "script has \"require signature\""
+        "script has \"require signature\""
     $ cover 10 (requiresAllOf script)
-       "script has \"require all of\""
+        "script has \"require all of\""
     $ cover 10 (requiresAnyOf script)
-       "script has \"require any of\""
+        "script has \"require any of\""
     $ cover 10 (requiresMOf script)
-       "script has \"require M of\""
+        "script has \"require M of\""
     $ cover 10 (requiresTimeBefore script)
-       "script has \"time before\""
+        "script has \"time before\""
     $ cover 10 (requiresTimeAfter script)
-       "script has \"time after\""
+        "script has \"time after\""
     $ cover 10 (hasOnlyNonRecursiveScriptPrimitive script)
-       "script has only non-recursive script primitives (sig, timeBefore, timeAfter)"
+        "script has only non-recursive script primitives (sig, timeBefore, timeAfter)"
     $ cover 10 (not (hasOnlyNonRecursiveScriptPrimitive script))
-       "script has recursive script primitives (allOf, anyOf, mOf)"
-    $ True
+        "script has recursive script primitives (allOf, anyOf, mOf)"
+        True
 
 hasOnlyNonRecursiveScriptPrimitive :: forall lang. SimpleScript lang -> Bool
 hasOnlyNonRecursiveScriptPrimitive = \case

@@ -196,9 +196,9 @@ genSimpleScript lang =
 
     -- Recursive generators
     recursive n =
-        [ RequireAllOf <$> (scale (`mod` 10) $ listOf $ recurse n)
+        [ RequireAllOf <$> scale (`mod` 10) (listOf $ recurse n)
 
-        , RequireAnyOf <$> (scale (`mod` 10) $ listOf $ recurse n)
+        , RequireAnyOf <$> scale (`mod` 10) (listOf $ recurse n)
 
         , do ts <- scale (`mod` 10) $ listOf $ recurse n
              m  <- choose (0, length ts)
