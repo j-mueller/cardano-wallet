@@ -9,8 +9,10 @@ import Prelude
 import Cardano.Api
     ( AssetId (..)
     , AssetName (..)
+    , BuildTx
     , CardanoEra (..)
     , Lovelace
+    , Quantity (..)
     , ScriptValidity (..)
     , SimpleScript (..)
     , SimpleScriptVersion (..)
@@ -20,15 +22,19 @@ import Cardano.Api
     , TxIn (..)
     , TxInsCollateral (..)
     , TxIx (..)
+    , TxMintValue (..)
     , TxScriptValidity (..)
     , TxValidityLowerBound (..)
     , TxValidityUpperBound (..)
+    , Value
     , collateralSupportedInEra
     , extraKeyWitnessesSupportedInEra
+    , multiAssetSupportedInEra
     , txFeesExplicitInEra
     , txScriptValiditySupportedInCardanoEra
     , validityLowerBoundSupportedInEra
     , validityUpperBoundSupportedInEra
+    , valueToList
     )
 import Cardano.Api.Gen
 import Data.Char
@@ -227,6 +233,32 @@ spec =
                 property genAlphaNumCoverage
             it "genAssetId" $
                 property genAssetIdCoverage
+            it "genValueForMinting" $
+                property
+                $ forAll genValueForMinting genValueForMintingCoverage
+            it "genSignedQuantity" $
+                property genSignedQuantityCoverage
+            describe "genTxMintValue" $ do
+                it "genTxMintValue ByronEra" $
+                    property
+                    $ forAll (genTxMintValue ByronEra)
+                    $ genTxMintValueCoverage ByronEra
+                it "genTxMintValue ShelleyEra" $
+                    property
+                    $ forAll (genTxMintValue ShelleyEra)
+                    $ genTxMintValueCoverage ShelleyEra
+                it "genTxMintValue AllegraEra" $
+                    property
+                    $ forAll (genTxMintValue AllegraEra)
+                    $ genTxMintValueCoverage AllegraEra
+                it "genTxMintValue MaryEra" $
+                    property
+                    $ forAll (genTxMintValue MaryEra)
+                    $ genTxMintValueCoverage MaryEra
+                it "genTxMintValue AlonzoEra" $
+                    property
+                    $ forAll (genTxMintValue AlonzoEra)
+                    $ genTxMintValueCoverage AlonzoEra
 
 genTxIxCoverage :: TxIx -> Property
 genTxIxCoverage (TxIx ix) = unsignedCoverage "txIx" ix
@@ -540,8 +572,8 @@ genAssetNameCoverage n = checkCoverage
     $ label "is alphanumeric" (all isAlphaNum assetNameStr)
       & counterexample "character wasn't alphabetic or numeric"
     where
-        assetNameStr = (\(AssetName n') -> B8.unpack n') $ n
-        assetNameLen = (\(AssetName n') -> BS.length n') $ n
+        assetNameStr = (\(AssetName n') -> B8.unpack n') n
+        assetNameLen = (\(AssetName n') -> BS.length n') n
         shortLength = 1
         longLength = 32
 
@@ -566,7 +598,7 @@ genAssetIdCoverage assetId = checkCoverage
         "ADA asset id"
     $ cover 10 (isNonAdaAssetId assetId)
         "non-ADA asset id"
-    $ True
+        True
 
     where
         isAdaAssetId = (== AdaAssetId)
@@ -576,6 +608,58 @@ genAssetIdCoverage assetId = checkCoverage
 
 instance Arbitrary AssetId where
     arbitrary = genAssetId
+
+genValueForMintingCoverage :: Value -> Property
+genValueForMintingCoverage val = checkCoverage
+    $ cover 10 (hasMintingValue val)
+      "minting assets"
+    $ cover 10 (hasBurningValue val)
+      "burning assets"
+    $ conjoin
+      [ label "no empty mint/burn" (not $ hasZeroValue val)
+        & counterexample "shouldn't generate a zero mint/burn value"
+      , label "is never ADA value (can't mint ADA)" (hasNoAdaValue val)
+        & counterexample "generated ADA mint (you can't mint ADA!)"
+      ]
+
+    where
+        hasNoAdaValue = all ((/= AdaAssetId) . fst) . valueToList
+
+        hasMintingValue = any ((> 0) . snd) . valueToList
+
+        hasBurningValue = any ((< 0) . snd) . valueToList
+
+        hasZeroValue = any ((== 0) . snd) . valueToList
+
+genSignedQuantityCoverage :: Quantity -> Property
+genSignedQuantityCoverage = signedCoverage "quantity"
+
+instance Arbitrary Quantity where
+    arbitrary = genSignedQuantity
+
+genTxMintValueCoverage :: CardanoEra era -> TxMintValue BuildTx era -> Property
+genTxMintValueCoverage era val =
+    case multiAssetSupportedInEra era of
+        Left _ ->
+            label "mint values are not generated in unsupported eras"
+                (val == TxMintNone)
+            & counterexample ( "a mint value was generated in an unsupported "
+                              <> show era
+                             )
+        Right _ ->
+            checkCoverage
+            $ cover 40 (noMint val)
+              "no mint"
+            $ cover 40 (someMint val)
+              "mint"
+              True
+
+    where
+        noMint = (== TxMintNone)
+
+        someMint = \case
+            TxMintNone -> False
+            TxMintValue _ _ _ -> True
 
 unsignedCoverage
     :: ( Num a
@@ -596,3 +680,25 @@ unsignedCoverage name x = checkCoverage
 
     where
         veryLarge = fromIntegral (maxBound :: Word32)
+
+signedCoverage
+  :: ( Num a
+     , Ord a
+     )
+  => String
+  -> a
+  -> Property
+signedCoverage name x = checkCoverage
+    $ cover 1 (x == 0)
+        (name <> " is zero")
+    $ cover 30 (x > verySmall && x < veryLarge)
+        (name <> " is between very small and very large")
+    $ cover 5 (x > veryLarge)
+        (name <> " is greater than very large")
+    $ cover 5 (x < verySmall)
+        (name <> " is less than very small")
+        True
+
+    where
+        veryLarge = fromIntegral (maxBound :: Word32)
+        verySmall = -fromIntegral (maxBound :: Word32)

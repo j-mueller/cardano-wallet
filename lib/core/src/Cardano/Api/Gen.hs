@@ -26,11 +26,14 @@ module Cardano.Api.Gen
   , genScriptInAnyLang
   , genScriptInEra
   , genScriptHash
-
   , genAssetName
   , genAlphaNum
   , genPolicyId
   , genAssetId
+  , genValue
+  , genValueForMinting
+  , genSignedQuantity
+  , genTxMintValue
   ) where
 
 import Prelude
@@ -39,6 +42,8 @@ import Cardano.Api hiding
     ( txIns )
 import Cardano.Api.Shelley
     ( PlutusScript (..) )
+import Data.Int
+    ( Int64 )
 import Data.Maybe
     ( maybeToList )
 import Data.String
@@ -250,8 +255,8 @@ genAssetName =
   frequency
     -- mostly from a small number of choices, so we get plenty of repetition
     [ (9, elements ["", "a", "b", "c"])
-    , (1, AssetName <$> fromString <$> (vectorOf 32 genAlphaNum))
-    , (1, AssetName <$> fromString <$> (
+    , (1, AssetName . fromString <$> (vectorOf 32 genAlphaNum))
+    , (1, AssetName . fromString <$> (
               scale (\n -> (n `mod` 31) + 1)
                   (listOf genAlphaNum)
               )
@@ -277,3 +282,33 @@ genAssetId = oneof
     [ AssetId <$> genPolicyId <*> genAssetName
     , return AdaAssetId
     ]
+
+genValue :: Gen AssetId -> Gen Quantity -> Gen Value
+genValue genAId genQuant =
+  valueFromList <$>
+    listOf ((,) <$> genAId <*> genQuant)
+
+-- | Generate a positive or negative quantity.
+genSignedQuantity :: Gen Quantity
+genSignedQuantity = do
+    (Large (n :: Int64)) <- arbitrary
+    pure $ fromIntegral n
+
+-- | Generate a 'Value' suitable for minting, i.e. non-ADA asset ID and a
+-- positive or negative quantity.
+genValueForMinting :: Gen Value
+genValueForMinting = genValue genAssetIdNoAda genSignedQuantity
+  where
+    genAssetIdNoAda :: Gen AssetId
+    genAssetIdNoAda = AssetId <$> genPolicyId <*> genAssetName
+
+genTxMintValue :: CardanoEra era -> Gen (TxMintValue BuildTx era)
+genTxMintValue era =
+  case multiAssetSupportedInEra era of
+    Left _ -> pure TxMintNone
+    Right supported ->
+      oneof
+        [ pure TxMintNone
+        -- TODO gen policy IDs
+        , TxMintValue supported <$> genValueForMinting <*> return (BuildTxWith mempty)
+        ]
