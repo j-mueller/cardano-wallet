@@ -11,6 +11,7 @@ module Cardano.Api.Gen
   , genTxId
   , genTxIndex
   , genShelleyHash
+  , genTxInsCollateral
   ) where
 
 import Prelude
@@ -18,7 +19,7 @@ import Prelude
 import Cardano.Api hiding
     ( txIns )
 import Test.QuickCheck
-    ( Gen, Large (..), arbitrary )
+    ( Gen, Large (..), arbitrary, listOf, oneof )
 
 import qualified Cardano.Binary as CBOR
 import qualified Cardano.Crypto.Hash as Crypto
@@ -39,3 +40,12 @@ genTxIndex :: Gen TxIx
 genTxIndex = do
     (Large (n :: Word)) <- arbitrary
     pure $ TxIx n
+
+genTxInsCollateral :: CardanoEra era -> Gen (TxInsCollateral era)
+genTxInsCollateral era =
+    case collateralSupportedInEra era of
+      Nothing        -> pure TxInsCollateralNone
+      Just supported -> oneof
+                          [ pure TxInsCollateralNone
+                          , TxInsCollateral supported <$> listOf genTxIn
+                          ]
