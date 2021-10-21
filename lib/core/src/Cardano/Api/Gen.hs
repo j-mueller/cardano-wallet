@@ -12,6 +12,7 @@ module Cardano.Api.Gen
   , genTxIndex
   , genShelleyHash
   , genTxInsCollateral
+  , genSlotNo
   ) where
 
 import Prelude
@@ -49,3 +50,6 @@ genTxInsCollateral era =
                           [ pure TxInsCollateralNone
                           , TxInsCollateral supported <$> listOf genTxIn
                           ]
+
+genSlotNo :: Gen SlotNo
+genSlotNo = SlotNo <$> arbitrary

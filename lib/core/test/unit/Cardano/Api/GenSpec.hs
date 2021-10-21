@@ -9,6 +9,7 @@ import Prelude
 
 import Cardano.Api
     ( CardanoEra (..)
+    , SlotNo (..)
     , TxIn (..)
     , TxInsCollateral (..)
     , TxIx (..)
@@ -61,20 +62,11 @@ spec =
                     property
                     $ forAll (genTxInsCollateral AlonzoEra)
                     $ genTxInCollateralCoverage AlonzoEra
+            it "genSlotNo" $
+                property genSlotNoCoverage
 
 genTxIxCoverage :: TxIx -> Property
-genTxIxCoverage txIx = checkCoverage
-    $ cover 1 (txIx == TxIx 0)
-        "txIx is zero"
-    $ cover 2 (txIx >= veryLargeTxIx)
-        "txIx is very large"
-    $ cover 10 (txIx > TxIx 0 && txIx < veryLargeTxIx)
-        "txIx is between smallest and very large"
-    $ label "no txIx is negative" (txIx >= TxIx 0)
-      & counterexample "txIx was negative"
-    where
-        veryLargeTxIx :: TxIx
-        veryLargeTxIx = TxIx $ fromInteger $ toInteger (maxBound :: Word32)
+genTxIxCoverage (TxIx ix) = unsignedCoverage "txIx" ix
 
 instance Arbitrary TxIx where
     arbitrary = genTxIndex
@@ -119,3 +111,29 @@ genTxInCollateralCoverage era collateral =
         collateralLength = \case
             TxInsCollateralNone  -> Nothing
             TxInsCollateral _ cs -> Just $ length cs
+
+genSlotNoCoverage :: SlotNo -> Property
+genSlotNoCoverage = unsignedCoverage "slot number"
+
+instance Arbitrary SlotNo where
+    arbitrary = genSlotNo
+
+unsignedCoverage
+    :: ( Num a
+       , Ord a
+       )
+    => String
+    -> a
+    -> Property
+unsignedCoverage name x = checkCoverage
+    $ cover 1 (x == 0)
+        (name <> " is zero")
+    $ cover 30 (x > 0 && x < veryLarge)
+        (name <> " is between zero and very large")
+    $ cover 5 (x > veryLarge)
+        (name <> " is greater than very large")
+    $ label (name <> " is non-negative") (x >= 0)
+      & counterexample (name <> " was negative")
+
+    where
+        veryLarge = fromIntegral (maxBound :: Word32)
