@@ -7,11 +7,14 @@ import Prelude
 
 import Cardano.Api
     ( CardanoEra (..)
+    , Lovelace (..)
     , SlotNo (..)
+    , TxFee (..)
     , TxIn (..)
     , TxInsCollateral (..)
     , TxIx (..)
     , collateralSupportedInEra
+    , txFeesExplicitInEra
     )
 import Cardano.Api.Gen
 import Data.Function
@@ -21,6 +24,7 @@ import Data.Word
 import Test.Hspec
 import Test.QuickCheck
     ( Arbitrary
+    , Gen
     , Property
     , arbitrary
     , checkCoverage
@@ -62,6 +66,26 @@ spec =
                     $ genTxInCollateralCoverage AlonzoEra
             it "genSlotNo" $
                 property genSlotNoCoverage
+            it "genLovelace" $
+                property genLovelaceCoverage
+            describe "genTxFee" $ do
+                it "ByronEra" $
+                    property
+                    $ forAll (genTxFee ByronEra)
+                    $ genTxFeeCoverage ByronEra
+                it "ShelleyEra" $
+                    property
+                    $ forAll (genTxFee ShelleyEra)
+                    $ genTxFeeCoverage ShelleyEra
+                it "AllegraEra" $
+                    property
+                    $ forAll (genTxFee AllegraEra)
+                    $ genTxFeeCoverage AllegraEra
+                it "MaryEra" $
+                    property
+                    $ forAll (genTxFee MaryEra)
+                    $ genTxFeeCoverage MaryEra
+
 
 genTxIxCoverage :: TxIx -> Property
 genTxIxCoverage (TxIx ix) = unsignedCoverage "txIx" ix
@@ -115,6 +139,29 @@ genSlotNoCoverage = unsignedCoverage "slot number"
 
 instance Arbitrary SlotNo where
     arbitrary = genSlotNo
+
+genLovelaceCoverage :: Lovelace -> Property
+genLovelaceCoverage = unsignedCoverage "lovelace"
+
+instance Arbitrary Lovelace where
+    arbitrary = genLovelace
+
+genTxFeeCoverage :: CardanoEra era -> TxFee era -> Property
+genTxFeeCoverage era fee =
+    case txFeesExplicitInEra era of
+        Left implicit ->
+            fee == TxFeeImplicit implicit
+            & label ("fee in " <> show era <> " is always implicit")
+            & counterexample ( "fee in era "
+                              <> show era
+                              <> " wasn't implicit but should be"
+                             )
+        Right explicit ->
+            case fee of
+                TxFeeImplicit _ ->
+                    error "fees are explicit in era but received implicit fee"
+                TxFeeExplicit _ fee ->
+                    genLovelaceCoverage fee
 
 unsignedCoverage
     :: ( Num a

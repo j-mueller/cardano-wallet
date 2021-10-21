@@ -7,12 +7,16 @@ module Cardano.Api.Gen
   , genShelleyHash
   , genTxInsCollateral
   , genSlotNo
+  , genLovelace
+  , genTxFee
   ) where
 
 import Prelude
 
 import Cardano.Api hiding
     ( txIns )
+import Data.Word
+    ( Word64 )
 import Test.QuickCheck
     ( Gen, Large (..), arbitrary, listOf, oneof )
 
@@ -47,3 +51,15 @@ genTxInsCollateral era =
 
 genSlotNo :: Gen SlotNo
 genSlotNo = SlotNo <$> arbitrary
+
+genLovelace :: Gen Lovelace
+genLovelace = do
+    (Large (n :: Word64)) <- arbitrary
+    pure $ quantityToLovelace $ Quantity $ toInteger n
+
+genTxFee :: CardanoEra era -> Gen (TxFee era)
+genTxFee era =
+  case txFeesExplicitInEra era of
+    Left  implicit -> pure (TxFeeImplicit implicit)
+    Right explicit -> TxFeeExplicit explicit <$> genLovelace
+
