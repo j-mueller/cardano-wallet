@@ -1,6 +1,4 @@
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RankNTypes #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Cardano.Api.GenSpec (spec) where
@@ -99,7 +97,7 @@ genTxInCollateralCoverage era collateral =
                 "list of more than zero collateral"
             $ cover 10 (collateralLength collateral > Just 3)
                 "list of more than three collateral"
-            $ True
+              True
 
     where
         hasNoCollateral = (== TxInsCollateralNone)
