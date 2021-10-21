@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RankNTypes #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Cardano.Api.GenSpec (spec) where
@@ -9,6 +10,8 @@ import Cardano.Api
     ( CardanoEra (..)
     , Lovelace
     , ScriptValidity (..)
+    , SimpleScript (..)
+    , SimpleScriptVersion (..)
     , SlotNo (..)
     , TxExtraKeyWitnesses (..)
     , TxFee (..)
@@ -207,6 +210,10 @@ spec =
                     property
                     $ forAll (genExtraKeyWitnesses AlonzoEra)
                     $ genExtraKeyWitnessesCoverage AlonzoEra
+            it "genSimpleScriptV1" $
+                property genSimpleScriptCoverageV1
+            it "genSimpleScriptV2" $
+                property genSimpleScriptCoverageV2
 
 genTxIxCoverage :: TxIx -> Property
 genTxIxCoverage (TxIx ix) = unsignedCoverage "txIx" ix
@@ -406,6 +413,112 @@ genExtraKeyWitnessesCoverage era ws =
         witnesses = \case
             TxExtraKeyWitnessesNone -> False
             TxExtraKeyWitnesses _ _ -> True
+
+genSimpleScriptCoverageV1 :: Property
+genSimpleScriptCoverageV1 =
+    forAll (genSimpleScript SimpleScriptV1) $ \script ->
+    checkCoverage
+    $ cover 10 (requiresSignature script)
+       "script has \"require signature\""
+    $ cover 10 (requiresAllOf script)
+       "script has \"require all of\""
+    $ cover 10 (requiresAnyOf script)
+       "script has \"require any of\""
+    $ cover 10 (requiresMOf script)
+       "script has \"require M of\""
+    $ cover 10 (hasOnlyNonRecursiveScriptPrimitive script)
+       "script has only non-recursive script primitives (sig, timeBefore, timeAfter)"
+    $ cover 10 (not (hasOnlyNonRecursiveScriptPrimitive script))
+       "script has recursive script primitives (allOf, anyOf, mOf)"
+    $ True
+
+genSimpleScriptCoverageV2 :: Property
+genSimpleScriptCoverageV2 =
+    forAll (genSimpleScript SimpleScriptV2) $ \script ->
+    checkCoverage
+    $ cover 10 (requiresSignature script)
+       "script has \"require signature\""
+    $ cover 10 (requiresAllOf script)
+       "script has \"require all of\""
+    $ cover 10 (requiresAnyOf script)
+       "script has \"require any of\""
+    $ cover 10 (requiresMOf script)
+       "script has \"require M of\""
+    $ cover 10 (requiresTimeBefore script)
+       "script has \"time before\""
+    $ cover 10 (requiresTimeAfter script)
+       "script has \"time after\""
+    $ cover 10 (hasOnlyNonRecursiveScriptPrimitive script)
+       "script has only non-recursive script primitives (sig, timeBefore, timeAfter)"
+    $ cover 10 (not (hasOnlyNonRecursiveScriptPrimitive script))
+       "script has recursive script primitives (allOf, anyOf, mOf)"
+    $ True
+
+hasOnlyNonRecursiveScriptPrimitive :: forall lang. SimpleScript lang -> Bool
+hasOnlyNonRecursiveScriptPrimitive = \case
+    (RequireSignature _)    -> True
+    (RequireTimeBefore _ _) -> True
+    (RequireTimeAfter _ _)  -> True
+    (RequireAllOf _)        -> False
+    (RequireAnyOf _)        -> False
+    (RequireMOf _ _)        -> False
+
+-- Returns true if any part of the script might require a signature.
+requiresSignature :: forall lang. SimpleScript lang -> Bool
+requiresSignature = \case
+    (RequireSignature _)    -> True
+    (RequireTimeBefore _ _) -> False
+    (RequireTimeAfter _ _)  -> False
+    (RequireAllOf ss)       -> any requiresSignature ss
+    (RequireAnyOf ss)       -> any requiresSignature ss
+    (RequireMOf _ ss)       -> any requiresSignature ss
+
+-- Returns true if any part of the script requires "time before".
+requiresTimeBefore :: forall lang. SimpleScript lang -> Bool
+requiresTimeBefore = \case
+    (RequireSignature _)    -> False
+    (RequireTimeBefore _ _) -> True
+    (RequireTimeAfter _ _)  -> False
+    (RequireAllOf ss)       -> any requiresTimeBefore ss
+    (RequireAnyOf ss)       -> any requiresTimeBefore ss
+    (RequireMOf _ ss)       -> any requiresTimeBefore ss
+
+-- Returns true if any part of the script requires "time after".
+requiresTimeAfter :: forall lang. SimpleScript lang -> Bool
+requiresTimeAfter = \case
+    (RequireSignature _)    -> False
+    (RequireTimeBefore _ _) -> False
+    (RequireTimeAfter _ _)  -> True
+    (RequireAllOf ss)       -> any requiresTimeBefore ss
+    (RequireAnyOf ss)       -> any requiresTimeBefore ss
+    (RequireMOf _ ss)       -> any requiresTimeBefore ss
+
+requiresAllOf :: forall lang. SimpleScript lang -> Bool
+requiresAllOf = \case
+    (RequireSignature _)    -> False
+    (RequireTimeBefore _ _) -> False
+    (RequireTimeAfter _ _)  -> False
+    (RequireAllOf _)        -> True
+    (RequireAnyOf ss)       -> any requiresAllOf ss
+    (RequireMOf _ ss)       -> any requiresAllOf ss
+
+requiresAnyOf :: forall lang. SimpleScript lang -> Bool
+requiresAnyOf = \case
+    (RequireSignature _)    -> False
+    (RequireTimeBefore _ _) -> False
+    (RequireTimeAfter _ _)  -> False
+    (RequireAllOf ss)       -> any requiresAnyOf ss
+    (RequireAnyOf _)        -> True
+    (RequireMOf _ ss)       -> any requiresAnyOf ss
+
+requiresMOf :: forall lang. SimpleScript lang -> Bool
+requiresMOf = \case
+    (RequireSignature _)    -> False
+    (RequireTimeBefore _ _) -> False
+    (RequireTimeAfter _ _)  -> False
+    (RequireAllOf ss)       -> any requiresMOf ss
+    (RequireAnyOf ss)       -> any requiresMOf ss
+    (RequireMOf _ _)        -> True
 
 unsignedCoverage
     :: ( Num a

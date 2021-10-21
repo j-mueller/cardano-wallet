@@ -20,21 +20,42 @@ module Cardano.Api.Gen
   , genVerificationKey
   , genVerificationKeyHash
   , genExtraKeyWitnesses
+  , genSimpleScript
+  , genPlutusScript
   ) where
 
 import Prelude
 
 import Cardano.Api hiding
     ( txIns )
+import Cardano.Api.Shelley
+    ( PlutusScript (..) )
+import Data.Maybe
+    ( maybeToList )
 import Data.Word
     ( Word64 )
+import Test.Cardano.Crypto.Gen
+    ()
 import Test.QuickCheck
-    ( Gen, Large (..), arbitrary, elements, listOf, oneof, vector )
+    ( Gen
+    , Large (..)
+    , Positive (..)
+    , arbitrary
+    , choose
+    , elements
+    , frequency
+    , listOf
+    , oneof
+    , scale
+    , sized
+    , vector
+    )
 
 import qualified Cardano.Binary as CBOR
 import qualified Cardano.Crypto.Hash as Crypto
 import qualified Cardano.Crypto.Seed as Crypto
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Short as SBS
 import qualified Shelley.Spec.Ledger.TxBody as Ledger
     ( EraIndependentTxBody )
 
@@ -146,4 +167,45 @@ genExtraKeyWitnesses era =
             , TxExtraKeyWitnesses supported
               <$> listOf (genVerificationKeyHash AsPaymentKey)
             ]
+
+genPlutusScript :: PlutusScriptVersion lang -> Gen (PlutusScript lang)
+genPlutusScript _ =
+    -- We make no attempt to create a valid script
+    PlutusScriptSerialised . SBS.toShort <$> arbitrary
+
+genSimpleScript :: SimpleScriptVersion lang -> Gen (SimpleScript lang)
+genSimpleScript lang =
+    sized genTerm
+  where
+    genTerm 0 = oneof nonRecursive
+    genTerm n = frequency
+        [ (3, oneof (recursive n))
+        , (1, oneof nonRecursive)
+        ]
+
+    -- Non-recursive generators
+    nonRecursive =
+        (RequireSignature . verificationKeyHash <$>
+            genVerificationKey AsPaymentKey)
+
+      : [ RequireTimeBefore supported <$> genSlotNo
+        | supported <- maybeToList (timeLocksSupported lang) ]
+
+     ++ [ RequireTimeAfter supported <$> genSlotNo
+        | supported <- maybeToList (timeLocksSupported lang) ]
+
+    -- Recursive generators
+    recursive n =
+        [ RequireAllOf <$> (scale (`mod` 10) $ listOf $ recurse n)
+
+        , RequireAnyOf <$> (scale (`mod` 10) $ listOf $ recurse n)
+
+        , do ts <- scale (`mod` 10) $ listOf $ recurse n
+             m  <- choose (0, length ts)
+             return (RequireMOf m ts)
+        ]
+
+    recurse n = do
+        (Positive m) <- arbitrary
+        genTerm (n `div` (m + 3))
 
