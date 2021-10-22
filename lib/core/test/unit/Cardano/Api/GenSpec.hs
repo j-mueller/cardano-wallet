@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeApplications #-}
@@ -8,7 +9,9 @@ module Cardano.Api.GenSpec (spec) where
 import Prelude
 
 import Cardano.Api
-    ( AnyScriptLanguage (..)
+    ( AddressInEra (..)
+    , AddressTypeInEra (..)
+    , AnyScriptLanguage (..)
     , AssetId (..)
     , AssetName (..)
     , BuildTx
@@ -397,6 +400,22 @@ spec =
                 property genStakeAddressReferenceCoverage
             it "genPaymentCredential" $
                 property genPaymentCredentialCoverage
+            describe "genAddressInEra" $ do
+                it "genAddressInEra ByronEra" $
+                    property $ forAll (genAddressInEra ByronEra) $
+                    genAddressInByronEraCoverage
+                it "genAddressInEra ShelleyEra" $
+                    property $ forAll (genAddressInEra ShelleyEra) $
+                    genAddressInShelleyBasedEraCoverage
+                it "genAddressInEra AllegraEra" $
+                    property $ forAll (genAddressInEra AllegraEra) $
+                    genAddressInShelleyBasedEraCoverage
+                it "genAddressInEra MaryEra" $
+                    property $ forAll (genAddressInEra MaryEra) $
+                    genAddressInShelleyBasedEraCoverage
+                it "genAddressInEra AlonzoEra" $
+                    property $ forAll (genAddressInEra AlonzoEra) $
+                    genAddressInShelleyBasedEraCoverage
 
 genTxIxCoverage :: TxIx -> Property
 genTxIxCoverage (TxIx ix) = unsignedCoverage (Proxy @Word32) "txIx" ix
@@ -1154,6 +1173,32 @@ genPaymentCredentialCoverage paymentCred = checkCoverage
 
 instance Arbitrary PaymentCredential where
     arbitrary = genPaymentCredential
+
+genAddressInByronEraCoverage :: AddressInEra era -> Property
+genAddressInByronEraCoverage addr =
+    label "in Byron era, always generate byron addresses"
+    $ case addr of
+        AddressInEra ByronAddressInAnyEra _addr ->
+            True
+        _ ->
+            False
+    & counterexample "Non-Byron address was generated in Byron era"
+
+genAddressInShelleyBasedEraCoverage :: AddressInEra era -> Property
+genAddressInShelleyBasedEraCoverage addr = checkCoverage
+    $ cover 10 (isByronAddress addr)
+        "byron address"
+    $ cover 10 (isShelleyAddress addr)
+        "shelley address"
+    $ True
+
+    where
+        isByronAddress = \case
+            AddressInEra ByronAddressInAnyEra _addr -> True
+            _ -> False
+        isShelleyAddress = \case
+            AddressInEra (ShelleyAddressInEra _era) _addr -> True
+            _ -> False
 
 -- | Provide coverage for an unsigned number.
 unsignedCoverage

@@ -54,6 +54,9 @@ module Cardano.Api.Gen
   , genPtr
   , genStakeAddressReference
   , genPaymentCredential
+  , genAddressByron
+  , genAddressShelley
+  , genAddressInEra
   ) where
 
 import Prelude
@@ -556,3 +559,25 @@ genPaymentCredential =
 
         byScript :: Gen PaymentCredential
         byScript = PaymentCredentialByScript <$> genScriptHash
+
+genAddressByron :: Gen (Address ByronAddr)
+genAddressByron = makeByronAddress <$> genNetworkId
+                                   <*> genVerificationKey AsByronKey
+
+genAddressShelley :: Gen (Address ShelleyAddr)
+genAddressShelley = makeShelleyAddress <$> genNetworkId
+                                       <*> genPaymentCredential
+                                       <*> genStakeAddressReference
+
+genAddressInEra :: CardanoEra era -> Gen (AddressInEra era)
+genAddressInEra era =
+  case cardanoEraStyle era of
+    LegacyByronEra ->
+      byronAddressInEra <$> genAddressByron
+
+    ShelleyBasedEra _ ->
+      oneof
+        [ byronAddressInEra   <$> genAddressByron
+        , shelleyAddressInEra <$> genAddressShelley
+        ]
+
