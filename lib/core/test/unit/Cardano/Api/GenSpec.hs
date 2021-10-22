@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Cardano.Api.GenSpec (spec) where
@@ -12,6 +13,8 @@ import Cardano.Api
     , BuildTx
     , CardanoEra (..)
     , Lovelace
+    , NetworkId (..)
+    , NetworkMagic (..)
     , Quantity (..)
     , ScriptValidity (..)
     , SimpleScript (..)
@@ -41,6 +44,10 @@ import Data.Char
     ( isAlphaNum, isDigit, isLower, isUpper )
 import Data.Function
     ( (&) )
+import Data.Int
+    ( Int32 )
+import Data.Proxy
+    ( Proxy (..), asProxyTypeOf )
 import Data.Word
     ( Word32 )
 import Test.Hspec
@@ -259,9 +266,13 @@ spec =
                     property
                     $ forAll (genTxMintValue AlonzoEra)
                     $ genTxMintValueCoverage AlonzoEra
+            it "genNetworkMagic" $
+                property genNetworkMagicCoverage
+            it "genNetworkId" $
+                property genNetworkIdCoverage
 
 genTxIxCoverage :: TxIx -> Property
-genTxIxCoverage (TxIx ix) = unsignedCoverage "txIx" ix
+genTxIxCoverage (TxIx ix) = unsignedCoverage (Proxy @Word32) "txIx" ix
 
 instance Arbitrary TxIx where
     arbitrary = genTxIndex
@@ -308,13 +319,13 @@ genTxInCollateralCoverage era collateral =
             TxInsCollateral _ cs -> Just $ length cs
 
 genSlotNoCoverage :: SlotNo -> Property
-genSlotNoCoverage = unsignedCoverage "slot number"
+genSlotNoCoverage = unsignedCoverage (Proxy @Word32) "slot number"
 
 instance Arbitrary SlotNo where
     arbitrary = genSlotNo
 
 genLovelaceCoverage :: Lovelace -> Property
-genLovelaceCoverage = unsignedCoverage "lovelace"
+genLovelaceCoverage = unsignedCoverage (Proxy @Word32) "lovelace"
 
 instance Arbitrary Lovelace where
     arbitrary = genLovelace
@@ -659,16 +670,47 @@ genTxMintValueCoverage era val =
 
         someMint = \case
             TxMintNone -> False
-            TxMintValue _ _ _ -> True
+            TxMintValue {} -> True
 
+genNetworkMagicCoverage :: NetworkMagic -> Property
+genNetworkMagicCoverage (NetworkMagic n) =
+    unsignedCoverage (Proxy @Int32) "network magic" n
+
+instance Arbitrary NetworkMagic where
+    arbitrary = genNetworkMagic
+
+genNetworkIdCoverage :: NetworkId -> Property
+genNetworkIdCoverage n = checkCoverage
+    $ cover 10 (isMainnet n)
+        "network is mainnet"
+    $ cover 10 (isTestnet n)
+        "network is testnet"
+        True
+    where
+        isMainnet = (== Mainnet)
+
+        isTestnet = \case
+            Mainnet   -> False
+            Testnet _ -> True
+
+instance Arbitrary NetworkId where
+    arbitrary = genNetworkId
+
+-- | Provide coverage for an unsigned number.
 unsignedCoverage
     :: ( Num a
        , Ord a
+       , Bounded b
+       , Integral b
        )
-    => String
+    => Proxy b
+    -- ^ Numbers greater than the maxBound of this type are considered "large"
+    -> String
+    -- ^ The name of the entity we are providing coverage for
     -> a
+    -- ^ The value of the entity
     -> Property
-unsignedCoverage name x = checkCoverage
+unsignedCoverage p name x = checkCoverage
     $ cover 1 (x == 0)
         (name <> " is zero")
     $ cover 30 (x > 0 && x < veryLarge)
@@ -679,7 +721,7 @@ unsignedCoverage name x = checkCoverage
       & counterexample (name <> " was negative")
 
     where
-        veryLarge = fromIntegral (maxBound :: Word32)
+        veryLarge = fromIntegral $ maxBound `asProxyTypeOf` p
 
 signedCoverage
   :: ( Num a

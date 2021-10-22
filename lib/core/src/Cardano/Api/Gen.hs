@@ -34,6 +34,8 @@ module Cardano.Api.Gen
   , genValueForMinting
   , genSignedQuantity
   , genTxMintValue
+  , genNetworkMagic
+  , genNetworkId
   ) where
 
 import Prelude
@@ -312,3 +314,16 @@ genTxMintValue era =
         -- TODO gen policy IDs
         , TxMintValue supported <$> genValueForMinting <*> return (BuildTxWith mempty)
         ]
+
+genNetworkMagic :: Gen NetworkMagic
+genNetworkMagic = do
+    (Large n) <- arbitrary
+    pure $ NetworkMagic n
+
+genNetworkId :: Gen NetworkId
+genNetworkId =
+    oneof
+        [ pure Mainnet
+        , Testnet <$> genNetworkMagic
+        ]
+
