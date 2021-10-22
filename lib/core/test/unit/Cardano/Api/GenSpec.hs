@@ -8,11 +8,13 @@ module Cardano.Api.GenSpec (spec) where
 import Prelude
 
 import Cardano.Api
-    ( AssetId (..)
+    ( AnyScriptLanguage (..)
+    , AssetId (..)
     , AssetName (..)
     , BuildTx
     , CardanoEra (..)
     , ExecutionUnits (..)
+    , KeyWitnessInCtx (..)
     , Lovelace
     , NetworkId (..)
     , NetworkMagic (..)
@@ -31,15 +33,20 @@ import Cardano.Api
     , TxScriptValidity (..)
     , TxValidityLowerBound (..)
     , TxValidityUpperBound (..)
+    , TxWithdrawals (..)
     , Value
+    , WitCtxStake
+    , Witness (..)
     , collateralSupportedInEra
     , extraKeyWitnessesSupportedInEra
     , multiAssetSupportedInEra
+    , scriptLanguageSupportedInEra
     , txFeesExplicitInEra
     , txScriptValiditySupportedInCardanoEra
     , validityLowerBoundSupportedInEra
     , validityUpperBoundSupportedInEra
     , valueToList
+    , withdrawalsSupportedInEra
     )
 import Cardano.Api.Gen
 import Cardano.Api.Shelley
@@ -282,6 +289,48 @@ spec =
                 property genScriptDataCoverage
             it "genExecutionUnits" $
                 property genExecutionUnitsCoverage
+            describe "genWitnessStake" $ do
+                it "genWitnessStake ByronEra" $
+                    property
+                    $ forAll (genWitnessStake ByronEra)
+                    $ genWitnessStakeCoverage ByronEra
+                it "genWitnessStake ShelleyEra" $
+                    property
+                    $ forAll (genWitnessStake ShelleyEra)
+                    $ genWitnessStakeCoverage ShelleyEra
+                it "genWitnessStake AllegraEra" $
+                    property
+                    $ forAll (genWitnessStake AllegraEra)
+                    $ genWitnessStakeCoverage AllegraEra
+                it "genWitnessStake MaryEra" $
+                    property
+                    $ forAll (genWitnessStake MaryEra)
+                    $ genWitnessStakeCoverage MaryEra
+                it "genWitnessStake AlonzoEra" $
+                    property
+                    $ forAll (genWitnessStake AlonzoEra)
+                    $ genWitnessStakeCoverage AlonzoEra
+            describe "genTxWithdrawals" $ do
+                it "genTxWithdrawals ByronEra" $
+                    property
+                    $ forAll (genTxWithdrawals ByronEra)
+                    $ genTxWithdrawalsCoverage ByronEra
+                it "genTxWithdrawals ShelleyEra" $
+                    property
+                    $ forAll (genTxWithdrawals ShelleyEra)
+                    $ genTxWithdrawalsCoverage ShelleyEra
+                it "genTxWithdrawals AllegraEra" $
+                    property
+                    $ forAll (genTxWithdrawals AllegraEra)
+                    $ genTxWithdrawalsCoverage AllegraEra
+                it "genTxWithdrawals MaryEra" $
+                    property
+                    $ forAll (genTxWithdrawals MaryEra)
+                    $ genTxWithdrawalsCoverage MaryEra
+                it "genTxWithdrawals AlonzoEra" $
+                    property
+                    $ forAll (genTxWithdrawals AlonzoEra)
+                    $ genTxWithdrawalsCoverage AlonzoEra
 
 genTxIxCoverage :: TxIx -> Property
 genTxIxCoverage (TxIx ix) = unsignedCoverage (Proxy @Word32) "txIx" ix
@@ -828,6 +877,59 @@ genExecutionUnitsCoverage (ExecutionUnits steps mem) = conjoin
 
 instance Arbitrary ExecutionUnits where
     arbitrary = genExecutionUnits
+
+genWitnessStakeCoverage
+    :: CardanoEra era
+    -> Witness WitCtxStake era
+    -> Property
+genWitnessStakeCoverage era wit =
+    let
+        supportedLangs = [ ()
+                         | AnyScriptLanguage lang <- [minBound..maxBound]
+                         , Just _langInEra <-
+                               [scriptLanguageSupportedInEra era lang]
+                         ]
+    in
+        if null supportedLangs
+        then
+            wit == KeyWitness KeyWitnessForStakeAddr
+            & label ("only key witnesses are generated in " <> show era)
+            & counterexample ( "a script witness was generated in "
+                              <> show era
+                              <> " but only key witnesses are supported in this"
+                              <> " era."
+                             )
+        else
+            checkCoverage
+            $ cover 20 (wit == KeyWitness KeyWitnessForStakeAddr)
+                "key witnesses in era"
+            $ cover 20 (isScriptWitness wit)
+                "script witnesses in era"
+                True
+
+    where
+        isScriptWitness = \case
+            (KeyWitness _)      -> False
+            (ScriptWitness _ _) -> True
+
+genTxWithdrawalsCoverage
+    :: CardanoEra era -> TxWithdrawals BuildTx era -> Property
+genTxWithdrawalsCoverage era ws =
+    case withdrawalsSupportedInEra era of
+        Nothing ->
+            ws == TxWithdrawalsNone
+            & label "withdrawals not generated in unsupported eras"
+            & counterexample ( "withdrawals were generated in unsupported era "
+                               <> show era
+                             )
+        Just _ -> checkCoverage
+            $ case ws of
+                TxWithdrawalsNone -> cover 10 True "no withdrawals" True
+                TxWithdrawals _ xs ->
+                    cover 1 (null xs) "empty withdrawals"
+                    $ cover 10 (not $ null xs) "some withdrawals"
+                    $ cover 10 (length xs > 3) "more withdrawals"
+                      True
 
 -- | Provide coverage for an unsigned number.
 unsignedCoverage

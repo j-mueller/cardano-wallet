@@ -40,6 +40,10 @@ module Cardano.Api.Gen
   , genStakeAddress
   , genScriptData
   , genExecutionUnits
+  , genTxWithdrawals
+  , genWithdrawalInfo
+  , genWitnessStake
+  , genScriptWitnessStake
   ) where
 
 import Prelude
@@ -385,3 +389,50 @@ genExecutionUnits = do
     (Large steps) <- arbitrary
     (Large mem) <- arbitrary
     pure $ ExecutionUnits steps mem
+
+genTxWithdrawals :: CardanoEra era -> Gen (TxWithdrawals BuildTx era)
+genTxWithdrawals era =
+  case withdrawalsSupportedInEra era of
+    Nothing ->
+        pure TxWithdrawalsNone
+    Just supported -> do
+        frequency
+          [ ( 1 , pure TxWithdrawalsNone )
+          , ( 3 , TxWithdrawals supported
+                  <$> listOf (genWithdrawalInfo era) )
+          ]
+
+genWithdrawalInfo
+    :: CardanoEra era
+    -> Gen ( StakeAddress
+           , Lovelace
+           , BuildTxWith BuildTx (Witness WitCtxStake era)
+           )
+genWithdrawalInfo era = do
+    stakeAddr <- genStakeAddress
+    amt <- genLovelace
+    wit <- BuildTxWith <$> genWitnessStake era
+    pure (stakeAddr, amt, wit)
+
+genWitnessStake :: CardanoEra era -> Gen (Witness WitCtxStake era)
+genWitnessStake era = oneof $
+    [ pure $ KeyWitness KeyWitnessForStakeAddr ]
+    <> [ ScriptWitness ScriptWitnessForStakeAddr
+         <$> genScriptWitnessStake langInEra
+       | AnyScriptLanguage lang <- [minBound..maxBound]
+       , Just langInEra <- [scriptLanguageSupportedInEra era lang]
+       ]
+
+genScriptWitnessStake
+    :: ScriptLanguageInEra lang era
+    -> Gen (ScriptWitness WitCtxStake era)
+genScriptWitnessStake langEra =
+    case languageOfScriptLanguageInEra langEra of
+        (SimpleScriptLanguage ver) ->
+            SimpleScriptWitness langEra ver <$> genSimpleScript ver
+        (PlutusScriptLanguage ver) ->
+            PlutusScriptWitness langEra ver
+            <$> genPlutusScript ver
+            <*> pure NoScriptDatumForStake
+            <*> genScriptData
+            <*> genExecutionUnits
