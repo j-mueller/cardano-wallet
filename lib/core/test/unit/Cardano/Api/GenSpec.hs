@@ -30,6 +30,9 @@ import Cardano.Api
     , TxIn (..)
     , TxInsCollateral (..)
     , TxIx (..)
+    , TxMetadata (..)
+    , TxMetadataInEra (..)
+    , TxMetadataValue (..)
     , TxMintValue (..)
     , TxScriptValidity (..)
     , TxValidityLowerBound (..)
@@ -44,6 +47,7 @@ import Cardano.Api
     , multiAssetSupportedInEra
     , scriptLanguageSupportedInEra
     , txFeesExplicitInEra
+    , txMetadataSupportedInEra
     , txScriptValiditySupportedInCardanoEra
     , validityLowerBoundSupportedInEra
     , validityUpperBoundSupportedInEra
@@ -81,6 +85,7 @@ import Test.QuickCheck
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as B8
+import qualified Data.Map as Map
 
 spec :: Spec
 spec =
@@ -354,6 +359,31 @@ spec =
                     property
                     $ forAll (genTxAuxScripts AlonzoEra)
                     $ genTxAuxScriptsCoverage AlonzoEra
+            it "genTxMetadataValue" $
+                property genTxMetadataValueCoverage
+            it "genTxMetadata" $
+                property genTxMetadataCoverage
+            describe "genTxMetadataInEra" $ do
+                it "genTxMetadataInEra ByronEra" $
+                    property
+                    $ forAll (genTxMetadataInEra ByronEra)
+                    $ genTxMetadataInEraCoverage ByronEra
+                it "genTxMetadataInEra ShelleyEra" $
+                    property
+                    $ forAll (genTxMetadataInEra ShelleyEra)
+                    $ genTxMetadataInEraCoverage ShelleyEra
+                it "genTxMetadataInEra AllegraEra" $
+                    property
+                    $ forAll (genTxMetadataInEra AllegraEra)
+                    $ genTxMetadataInEraCoverage AllegraEra
+                it "genTxMetadataInEra MaryEra" $
+                    property
+                    $ forAll (genTxMetadataInEra MaryEra)
+                    $ genTxMetadataInEraCoverage MaryEra
+                it "genTxMetadataInEra AlonzoEra" $
+                    property
+                    $ forAll (genTxMetadataInEra AlonzoEra)
+                    $ genTxMetadataInEraCoverage AlonzoEra
 
 genTxIxCoverage :: TxIx -> Property
 genTxIxCoverage (TxIx ix) = unsignedCoverage (Proxy @Word32) "txIx" ix
@@ -971,6 +1001,85 @@ genTxAuxScriptsCoverage era aux =
                     $ cover 50 (not $ null ss) "non-empty aux scripts"
                     $ cover 30 (length ss > 3) "some aux scripts"
                       True
+
+genTxMetadataValueCoverage :: TxMetadataValue -> Property
+genTxMetadataValueCoverage meta =
+    checkCoverage
+        $ cover 10 (isMetaNumber meta) "is TxMetaNumber"
+        $ cover 10 (isMetaBytes meta) "is TxMetaBytes"
+        $ cover 10 (isMetaText meta) "is TxMetaText"
+        $ cover 10 (isMetaList meta) "is TxMetaList"
+        $ cover 10 (isMetaMap meta) "is TxMetaMap" True
+
+    where
+        isMetaNumber = \case
+            TxMetaNumber _ -> True
+            _              -> False
+
+        isMetaBytes = \case
+            TxMetaBytes _ -> True
+            _             -> False
+
+        isMetaText = \case
+            TxMetaText _ -> True
+            _            -> False
+
+        isMetaList = \case
+            TxMetaList _ -> True
+            _            -> False
+
+        isMetaMap = \case
+            TxMetaMap _  -> True
+            _            -> False
+
+instance Arbitrary TxMetadataValue where
+    arbitrary = genTxMetadataValue
+
+genTxMetadataCoverage :: TxMetadata -> Property
+genTxMetadataCoverage (TxMetadata meta) =
+    let
+        metaMap = Map.toList meta
+    in
+        checkCoverage
+            $ cover 1 (null metaMap)
+              "no metadata entries"
+            $ cover 10 (not $ null metaMap)
+              "some metadata entries"
+            $ cover 10 (length metaMap > 10)
+              "lots of metadata entries"
+            $ conjoin $ fmap (metaNumberCoverage . fst) metaMap
+
+    where
+        metaNumberCoverage n = checkCoverage
+            $ cover 1 (n == 0)
+              "meta index == 0"
+            $ cover 10 (n > 0)
+              "meta index > 0"
+            $ cover 10 (n >= veryLargeMetaIndex)
+              "meta index is large"
+            $ cover 10 (n > 0 && n < veryLargeMetaIndex)
+              "meta index is between smallest and large"
+            $ property (n >= 0)
+              & counterexample "meta index was negative"
+
+        veryLargeMetaIndex = fromIntegral (maxBound :: Word32)
+
+instance Arbitrary TxMetadata where
+    arbitrary = genTxMetadata
+
+genTxMetadataInEraCoverage :: CardanoEra era -> TxMetadataInEra era -> Property
+genTxMetadataInEraCoverage era meta =
+    case txMetadataSupportedInEra era of
+        Nothing ->
+            meta == TxMetadataNone
+            & label "metadata not generated in unsupported era"
+            & counterexample ( "metadata was generated in unsupported "
+                               <> show era
+                             )
+        Just _ -> checkCoverage
+            $ case meta of
+                TxMetadataNone -> cover 10 True "no metadata" True
+                TxMetadataInEra _ _ -> cover 40 True "some metadata" True
 
 -- | Provide coverage for an unsigned number.
 unsignedCoverage

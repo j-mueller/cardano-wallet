@@ -45,6 +45,9 @@ module Cardano.Api.Gen
   , genWitnessStake
   , genScriptWitnessStake
   , genTxAuxScripts
+  , genTxMetadataInEra
+  , genTxMetadata
+  , genTxMetadataValue
   ) where
 
 import Prelude
@@ -53,12 +56,16 @@ import Cardano.Api hiding
     ( txIns )
 import Cardano.Api.Shelley
     ( PlutusScript (..), StakeCredential (..) )
+import Data.ByteString
+    ( ByteString )
 import Data.Int
     ( Int64 )
 import Data.Maybe
     ( maybeToList )
 import Data.String
     ( fromString )
+import Data.Text
+    ( Text )
 import Data.Word
     ( Word64, Word8 )
 import Test.Cardano.Crypto.Gen
@@ -69,6 +76,7 @@ import Test.QuickCheck
     , Positive (..)
     , arbitrary
     , choose
+    , chooseInt
     , elements
     , frequency
     , listOf
@@ -84,6 +92,8 @@ import qualified Cardano.Crypto.Hash as Crypto
 import qualified Cardano.Crypto.Seed as Crypto
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as SBS
+import qualified Data.Map as Map
+import qualified Data.Text as T
 import qualified Shelley.Spec.Ledger.TxBody as Ledger
     ( EraIndependentTxBody )
 
@@ -448,3 +458,61 @@ genTxAuxScripts era =
         , (3, TxAuxScripts supported
           <$> listOf (genScriptInEra era))
         ]
+
+genTxMetadataInEra :: CardanoEra era -> Gen (TxMetadataInEra era)
+genTxMetadataInEra era =
+  case txMetadataSupportedInEra era of
+    Nothing -> pure TxMetadataNone
+    Just supported ->
+        oneof
+            [ pure TxMetadataNone
+            , TxMetadataInEra supported <$> genTxMetadata
+            ]
+
+genTxMetadata :: Gen TxMetadata
+genTxMetadata =
+    sized $ \sz ->
+      fmap (TxMetadata . Map.fromList) $ do
+          n <- chooseInt (0, fromIntegral sz)
+          vectorOf n
+               ((,) <$> (getLarge <$> arbitrary)
+                    <*> genTxMetadataValue)
+
+genTxMetadataValue :: Gen TxMetadataValue
+genTxMetadataValue =
+    sized $ \sz ->
+        frequency
+            [ (1, TxMetaNumber <$> genTxMetaNumber)
+            , (1, TxMetaBytes  <$> genTxMetaBytes)
+            , (1, TxMetaText   <$> genTxMetaText)
+            , (fromIntegral (signum sz),
+                  TxMetaList <$> scale (`div` 2) genTxMetaList)
+            , (fromIntegral (signum sz),
+                  TxMetaMap <$> scale (`div` 2) genTxMetaMap)
+            ]
+    where
+        genTxMetaNumber :: Gen Integer
+        genTxMetaNumber = do
+            (Large (n :: Int64)) <- arbitrary
+            pure (fromIntegral n)
+
+        genTxMetaBytes :: Gen ByteString
+        genTxMetaBytes = do
+            n <- chooseInt (0, 64)
+            BS.pack <$> vector n
+
+        genTxMetaText :: Gen Text
+        genTxMetaText = do
+            n <- chooseInt (0, 64)
+            Text.pack <$> vectorOf n genAlphaNum
+
+        genTxMetaList :: Gen [TxMetadataValue]
+        genTxMetaList = sized $ \sz -> do
+            n <- chooseInt (0, sz)
+            vectorOf n genTxMetadataValue
+
+        genTxMetaMap :: Gen [(TxMetadataValue, TxMetadataValue)]
+        genTxMetaMap = sized $ \sz -> do
+            n <- chooseInt (0, sz)
+            vectorOf n
+                ((,) <$> genTxMetadataValue <*> genTxMetadataValue)
