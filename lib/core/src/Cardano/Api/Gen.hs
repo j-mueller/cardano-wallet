@@ -1,4 +1,6 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Cardano.Api.Gen
   ( genTxIn
@@ -48,6 +50,10 @@ module Cardano.Api.Gen
   , genTxMetadataInEra
   , genTxMetadata
   , genTxMetadataValue
+  , genIx
+  , genPtr
+  , genStakeAddressReference
+  , genPaymentCredential
   ) where
 
 import Prelude
@@ -56,6 +62,8 @@ import Cardano.Api hiding
     ( txIns )
 import Cardano.Api.Shelley
     ( PlutusScript (..), StakeCredential (..) )
+import Cardano.Ledger.Credential
+    ( Ix, Ptr (..) )
 import Data.ByteString
     ( ByteString )
 import Data.Int
@@ -89,6 +97,7 @@ import Test.QuickCheck
 
 import qualified Cardano.Binary as CBOR
 import qualified Cardano.Crypto.Hash as Crypto
+import qualified Cardano.Crypto.Hash.Class as Crypto
 import qualified Cardano.Crypto.Seed as Crypto
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as SBS
@@ -504,7 +513,7 @@ genTxMetadataValue =
         genTxMetaText :: Gen Text
         genTxMetaText = do
             n <- chooseInt (0, 64)
-            Text.pack <$> vectorOf n genAlphaNum
+            T.pack <$> vectorOf n genAlphaNum
 
         genTxMetaList :: Gen [TxMetadataValue]
         genTxMetaList = sized $ \sz -> do
@@ -516,3 +525,34 @@ genTxMetadataValue =
             n <- chooseInt (0, sz)
             vectorOf n
                 ((,) <$> genTxMetadataValue <*> genTxMetadataValue)
+
+genPtr :: Gen Ptr
+genPtr = Ptr <$> genSlotNo <*> genIx <*> genIx
+
+genIx :: Gen Ix
+genIx = do
+    (Large (n :: Word64)) <- arbitrary
+    pure n
+
+genStakeAddressReference :: Gen StakeAddressReference
+genStakeAddressReference =
+  oneof
+    [ StakeAddressByValue <$> genStakeCredential
+    , (StakeAddressByPointer . StakeAddressPointer) <$> genPtr
+    , return NoStakeAddress
+    ]
+
+genPaymentCredential :: Gen PaymentCredential
+genPaymentCredential =
+    oneof
+        [ byKey
+        , byScript
+        ]
+    where
+        byKey :: Gen PaymentCredential
+        byKey = do
+            vKey <- genVerificationKey AsPaymentKey
+            return . PaymentCredentialByKey $ verificationKeyHash vKey
+
+        byScript :: Gen PaymentCredential
+        byScript = PaymentCredentialByScript <$> genScriptHash

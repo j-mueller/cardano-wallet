@@ -18,12 +18,14 @@ import Cardano.Api
     , Lovelace
     , NetworkId (..)
     , NetworkMagic (..)
+    , PaymentCredential (..)
     , Quantity (..)
     , ScriptData (..)
     , ScriptValidity (..)
     , SimpleScript (..)
     , SimpleScriptVersion (..)
     , SlotNo (..)
+    , StakeAddressReference (..)
     , TxAuxScripts (..)
     , TxExtraKeyWitnesses (..)
     , TxFee (..)
@@ -57,6 +59,8 @@ import Cardano.Api
 import Cardano.Api.Gen
 import Cardano.Api.Shelley
     ( StakeCredential (..) )
+import Cardano.Ledger.Credential
+    ( Ix, Ptr (..) )
 import Data.ByteString
     ( ByteString )
 import Data.Char
@@ -384,6 +388,15 @@ spec =
                     property
                     $ forAll (genTxMetadataInEra AlonzoEra)
                     $ genTxMetadataInEraCoverage AlonzoEra
+            it "genIx" $
+                -- NOTE: can't use Arbitrary here because Ix is a type synonym
+                property (forAll genIx $ genIxCoverage)
+            it "genPtr" $
+                property genPtrCoverage
+            it "genStakeAddressReference" $
+                property genStakeAddressReferenceCoverage
+            it "genPaymentCredential" $
+                property genPaymentCredentialCoverage
 
 genTxIxCoverage :: TxIx -> Property
 genTxIxCoverage (TxIx ix) = unsignedCoverage (Proxy @Word32) "txIx" ix
@@ -1080,6 +1093,67 @@ genTxMetadataInEraCoverage era meta =
             $ case meta of
                 TxMetadataNone -> cover 10 True "no metadata" True
                 TxMetadataInEra _ _ -> cover 40 True "some metadata" True
+
+genIxCoverage :: Ix -> Property
+genIxCoverage = unsignedCoverage (Proxy @Word32) "ix"
+
+genPtrCoverage :: Ptr -> Property
+genPtrCoverage (Ptr slotNo ix1 ix2) = conjoin
+    [ genSlotNoCoverage slotNo
+    , genIxCoverage ix1
+    , genIxCoverage ix2
+    ]
+
+instance Arbitrary Ptr where
+    arbitrary = genPtr
+
+genStakeAddressReferenceCoverage :: StakeAddressReference -> Property
+genStakeAddressReferenceCoverage ref = checkCoverage
+    $ cover 10 (byValue ref)
+        "stake address reference created by value"
+    $ cover 10 (byPointer ref)
+        "stake address reference created by pointer"
+    $ cover 10 (noStakeAddress ref)
+        "no stake address"
+        True
+    where
+        byValue = \case
+            StakeAddressByValue _   -> True
+            StakeAddressByPointer _ -> False
+            NoStakeAddress          -> False
+
+        byPointer = \case
+            StakeAddressByValue _   -> False
+            StakeAddressByPointer _ -> True
+            NoStakeAddress          -> False
+
+        noStakeAddress = \case
+            StakeAddressByValue _   -> False
+            StakeAddressByPointer _ -> False
+            NoStakeAddress          -> True
+
+instance Arbitrary StakeAddressReference where
+    arbitrary = genStakeAddressReference
+
+genPaymentCredentialCoverage :: PaymentCredential -> Property
+genPaymentCredentialCoverage paymentCred = checkCoverage
+    $ cover 20 (isByKey paymentCred)
+        "payment credential is provided by key"
+    $ cover 20 (isByScript paymentCred)
+        "payment credential is provided by script"
+    $ True
+
+    where
+        isByKey = \case
+            (PaymentCredentialByKey _) -> True
+            (PaymentCredentialByScript _) -> False
+
+        isByScript = \case
+            (PaymentCredentialByKey _) -> False
+            (PaymentCredentialByScript _) -> True
+
+instance Arbitrary PaymentCredential where
+    arbitrary = genPaymentCredential
 
 -- | Provide coverage for an unsigned number.
 unsignedCoverage
