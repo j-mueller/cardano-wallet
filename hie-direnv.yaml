@@ -1,0 +1,15 @@
+########################################################################
+# Custom configuration for haskell-language-server.
+#
+# Use this instead of the default Stack cradle if you want faster
+# reloads and cross-package jump-to-definition. It requires
+# nix-direnv.
+#
+# To use it, symlink hie-direnv.yaml to hie.yaml.
+# Prepare your environment with "direnv allow"
+# and then "cabal build all".
+########################################################################
+
+cradle:
+  bios:
+    program: "./scripts/gen-hie-bios.sh"
