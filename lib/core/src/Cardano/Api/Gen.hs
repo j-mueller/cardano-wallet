@@ -44,6 +44,7 @@ module Cardano.Api.Gen
   , genWithdrawalInfo
   , genWitnessStake
   , genScriptWitnessStake
+  , genTxAuxScripts
   ) where
 
 import Prelude
@@ -436,3 +437,14 @@ genScriptWitnessStake langEra =
             <*> pure NoScriptDatumForStake
             <*> genScriptData
             <*> genExecutionUnits
+
+genTxAuxScripts :: CardanoEra era -> Gen (TxAuxScripts era)
+genTxAuxScripts era =
+  case auxScriptsSupportedInEra era of
+    Nothing -> pure TxAuxScriptsNone
+    Just supported ->
+        frequency
+        [ (1, pure TxAuxScriptsNone)
+        , (3, TxAuxScripts supported
+          <$> listOf (genScriptInEra era))
+        ]

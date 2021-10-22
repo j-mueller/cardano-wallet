@@ -24,6 +24,7 @@ import Cardano.Api
     , SimpleScript (..)
     , SimpleScriptVersion (..)
     , SlotNo (..)
+    , TxAuxScripts (..)
     , TxExtraKeyWitnesses (..)
     , TxFee (..)
     , TxIn (..)
@@ -37,6 +38,7 @@ import Cardano.Api
     , Value
     , WitCtxStake
     , Witness (..)
+    , auxScriptsSupportedInEra
     , collateralSupportedInEra
     , extraKeyWitnessesSupportedInEra
     , multiAssetSupportedInEra
@@ -331,6 +333,27 @@ spec =
                     property
                     $ forAll (genTxWithdrawals AlonzoEra)
                     $ genTxWithdrawalsCoverage AlonzoEra
+            describe "genTxAuxScripts" $ do
+                it "genTxAuxScripts ByronEra" $
+                    property
+                    $ forAll (genTxAuxScripts ByronEra)
+                    $ genTxAuxScriptsCoverage ByronEra
+                it "genTxAuxScripts ShelleyEra" $
+                    property
+                    $ forAll (genTxAuxScripts ShelleyEra)
+                    $ genTxAuxScriptsCoverage ShelleyEra
+                it "genTxAuxScripts AllegraEra" $
+                    property
+                    $ forAll (genTxAuxScripts AllegraEra)
+                    $ genTxAuxScriptsCoverage AllegraEra
+                it "genTxAuxScripts MaryEra" $
+                    property
+                    $ forAll (genTxAuxScripts MaryEra)
+                    $ genTxAuxScriptsCoverage MaryEra
+                it "genTxAuxScripts AlonzoEra" $
+                    property
+                    $ forAll (genTxAuxScripts AlonzoEra)
+                    $ genTxAuxScriptsCoverage AlonzoEra
 
 genTxIxCoverage :: TxIx -> Property
 genTxIxCoverage (TxIx ix) = unsignedCoverage (Proxy @Word32) "txIx" ix
@@ -929,6 +952,24 @@ genTxWithdrawalsCoverage era ws =
                     cover 1 (null xs) "empty withdrawals"
                     $ cover 10 (not $ null xs) "some withdrawals"
                     $ cover 10 (length xs > 3) "more withdrawals"
+                      True
+
+genTxAuxScriptsCoverage :: CardanoEra era -> TxAuxScripts era -> Property
+genTxAuxScriptsCoverage era aux =
+    case auxScriptsSupportedInEra era of
+        Nothing ->
+            aux == TxAuxScriptsNone
+            & label "aux scripts not generated in unsupported era"
+            & counterexample ( "aux scripts were generated in unsupported "
+                               <> show era
+                             )
+        Just _ -> checkCoverage
+            $ case aux of
+                TxAuxScriptsNone  -> cover 10 True "no aux scripts" True
+                TxAuxScripts _ ss ->
+                    cover 1 (null ss) "empty aux scripts"
+                    $ cover 50 (not $ null ss) "non-empty aux scripts"
+                    $ cover 30 (length ss > 3) "some aux scripts"
                       True
 
 -- | Provide coverage for an unsigned number.
