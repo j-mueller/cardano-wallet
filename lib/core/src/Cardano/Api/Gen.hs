@@ -36,6 +36,8 @@ module Cardano.Api.Gen
   , genTxMintValue
   , genNetworkMagic
   , genNetworkId
+  , genStakeCredential
+  , genStakeAddress
   ) where
 
 import Prelude
@@ -43,7 +45,7 @@ import Prelude
 import Cardano.Api hiding
     ( txIns )
 import Cardano.Api.Shelley
-    ( PlutusScript (..) )
+    ( PlutusScript (..), StakeCredential (..) )
 import Data.Int
     ( Int64 )
 import Data.Maybe
@@ -326,4 +328,21 @@ genNetworkId =
         [ pure Mainnet
         , Testnet <$> genNetworkMagic
         ]
+
+genStakeCredential :: Gen StakeCredential
+genStakeCredential =
+  oneof
+    [ byKey
+    , byScript
+    ]
+
+  where
+      byKey = do
+          vKey <- genVerificationKey AsStakeKey
+          return . StakeCredentialByKey $ verificationKeyHash vKey
+
+      byScript = StakeCredentialByScript <$> genScriptHash
+
+genStakeAddress :: Gen StakeAddress
+genStakeAddress = makeStakeAddress <$> genNetworkId <*> genStakeCredential
 

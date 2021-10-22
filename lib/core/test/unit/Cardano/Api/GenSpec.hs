@@ -40,6 +40,8 @@ import Cardano.Api
     , valueToList
     )
 import Cardano.Api.Gen
+import Cardano.Api.Shelley
+    ( StakeCredential (..) )
 import Data.Char
     ( isAlphaNum, isDigit, isLower, isUpper )
 import Data.Function
@@ -270,6 +272,8 @@ spec =
                 property genNetworkMagicCoverage
             it "genNetworkId" $
                 property genNetworkIdCoverage
+            it "genStakeCredential" $
+                property genStakeCredentialCoverage
 
 genTxIxCoverage :: TxIx -> Property
 genTxIxCoverage (TxIx ix) = unsignedCoverage (Proxy @Word32) "txIx" ix
@@ -695,6 +699,26 @@ genNetworkIdCoverage n = checkCoverage
 
 instance Arbitrary NetworkId where
     arbitrary = genNetworkId
+
+genStakeCredentialCoverage :: StakeCredential -> Property
+genStakeCredentialCoverage sc = checkCoverage
+    $ cover 10 (isByKey sc)
+        "stake credential built from key"
+    $ cover 10 (isByScript sc)
+        "stake credential built from script"
+        True
+
+    where
+        isByKey = \case
+            StakeCredentialByKey _    -> True
+            StakeCredentialByScript _ -> False
+
+        isByScript = \case
+            StakeCredentialByKey _    -> False
+            StakeCredentialByScript _ -> True
+
+instance Arbitrary StakeCredential where
+    arbitrary = genStakeCredential
 
 -- | Provide coverage for an unsigned number.
 unsignedCoverage
