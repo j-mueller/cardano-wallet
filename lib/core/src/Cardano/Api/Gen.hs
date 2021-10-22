@@ -38,6 +38,8 @@ module Cardano.Api.Gen
   , genNetworkId
   , genStakeCredential
   , genStakeAddress
+  , genScriptData
+  , genExecutionUnits
   ) where
 
 import Prelude
@@ -53,7 +55,7 @@ import Data.Maybe
 import Data.String
     ( fromString )
 import Data.Word
-    ( Word64 )
+    ( Word64, Word8 )
 import Test.Cardano.Crypto.Gen
     ()
 import Test.QuickCheck
@@ -346,3 +348,40 @@ genStakeCredential =
 genStakeAddress :: Gen StakeAddress
 genStakeAddress = makeStakeAddress <$> genNetworkId <*> genStakeCredential
 
+genScriptData :: Gen ScriptData
+genScriptData =
+    sized genTerm
+
+    where
+        genTerm 0 = oneof nonRecursive
+        genTerm n = frequency
+            [ (3, oneof (recursive n))
+            , (1, oneof nonRecursive)
+            ]
+
+        -- Non-recursive generators
+        nonRecursive =
+            [ do
+                 (Large (n :: Int64)) <- arbitrary
+                 pure $ ScriptDataNumber $ fromIntegral n
+            , do
+                 (Large (n :: Word8)) <- arbitrary
+                 (ScriptDataBytes . BS.pack) <$> vector (fromIntegral n)
+            ]
+
+        -- Recursive generators
+        recursive n =
+            [ ScriptDataList <$> listOf (recurse n)
+            , ScriptDataMap <$> listOf ((,) <$> recurse n <*> recurse n)
+            , ScriptDataConstructor <$> arbitrary <*> listOf (recurse n)
+            ]
+
+        recurse n = do
+            (Positive m) <- arbitrary
+            genTerm (n `div` (m + 3))
+
+genExecutionUnits :: Gen ExecutionUnits
+genExecutionUnits = do
+    (Large steps) <- arbitrary
+    (Large mem) <- arbitrary
+    pure $ ExecutionUnits steps mem

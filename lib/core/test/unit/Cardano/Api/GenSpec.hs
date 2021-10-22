@@ -12,10 +12,12 @@ import Cardano.Api
     , AssetName (..)
     , BuildTx
     , CardanoEra (..)
+    , ExecutionUnits (..)
     , Lovelace
     , NetworkId (..)
     , NetworkMagic (..)
     , Quantity (..)
+    , ScriptData (..)
     , ScriptValidity (..)
     , SimpleScript (..)
     , SimpleScriptVersion (..)
@@ -42,6 +44,8 @@ import Cardano.Api
 import Cardano.Api.Gen
 import Cardano.Api.Shelley
     ( StakeCredential (..) )
+import Data.ByteString
+    ( ByteString )
 import Data.Char
     ( isAlphaNum, isDigit, isLower, isUpper )
 import Data.Function
@@ -274,6 +278,10 @@ spec =
                 property genNetworkIdCoverage
             it "genStakeCredential" $
                 property genStakeCredentialCoverage
+            it "genScriptDataCoverage" $
+                property genScriptDataCoverage
+            it "genExecutionUnits" $
+                property genExecutionUnitsCoverage
 
 genTxIxCoverage :: TxIx -> Property
 genTxIxCoverage (TxIx ix) = unsignedCoverage (Proxy @Word32) "txIx" ix
@@ -719,6 +727,107 @@ genStakeCredentialCoverage sc = checkCoverage
 
 instance Arbitrary StakeCredential where
     arbitrary = genStakeCredential
+
+genScriptDataNumberCoverage :: Integer -> Property
+genScriptDataNumberCoverage n = checkCoverage
+    $ cover 1 (n == 0)
+        "number is equal to 0"
+    $ cover 2 (n >= veryLargeNumber)
+        "number is very large"
+    $ cover 2 (n <= verySmallNumber)
+        "number is very small"
+    $ cover 10 (n > verySmallNumber && n < veryLargeNumber)
+        "number is between very small and very large"
+        True
+
+    where
+        verySmallNumber = fromIntegral (minBound :: Int32)
+        veryLargeNumber = fromIntegral (maxBound :: Int32)
+
+genScriptDataBytesCoverage :: ByteString -> Property
+genScriptDataBytesCoverage bs = checkCoverage
+    $ cover 1 (BS.length bs == 0)
+        "no bytes"
+    $ cover 10 (BS.length bs > 0)
+        "some bytes"
+    $ cover 2 (BS.length bs > 32)
+        "lots of bytes"
+        True
+
+genScriptDataListCoverage :: [ScriptData] -> Property
+genScriptDataListCoverage ss = checkCoverage
+    $ cover 1 (null ss)
+        "no scripts in list"
+    $ cover 10 (not $ null ss)
+        "some scripts in list"
+    $ cover 10 (length ss > 32)
+        "lots of scripts in list"
+    $ conjoin
+    $ fmap genScriptDataCoverage ss
+
+genScriptDataMapCoverage :: [(ScriptData, ScriptData)] -> Property
+genScriptDataMapCoverage ss = checkCoverage
+    $ cover 1 (null ss)
+        "no scripts in map"
+    $ cover 10 (not $ null ss)
+        "some scripts in map"
+    $ cover 10 (length ss > 32)
+        "lots of scripts in map"
+    $ conjoin
+    $ fmap (\(k, v) ->
+                conjoin [genScriptDataCoverage k, genScriptDataCoverage v]
+           ) ss
+
+genScriptDataConstructorCoverage :: (Integer, [ScriptData]) -> Property
+genScriptDataConstructorCoverage (ix, ss) = checkCoverage
+    $ cover 1 (null ss)
+        "no scripts in constr"
+    $ cover 10 (not $ null ss)
+        "some scripts in constr"
+    $ cover 10 (length ss > 3)
+        "lots of scripts in constr"
+    $ cover 1 (ix == 0)
+        "ix == 0"
+    $ cover 10 (ix > 0)
+        "ix > 0"
+    $ cover 10 (ix > 3)
+        "ix > 3"
+        True
+
+genScriptDataCoverage :: ScriptData -> Property
+genScriptDataCoverage dat = conjoin
+    [ checkCoverage
+      $ case dat of
+          ScriptDataNumber _        -> cover 10 True "is script data number"
+          ScriptDataBytes _         -> cover 10 True "is script data bytes"
+          ScriptDataList _          -> cover 10 True "is script data list"
+          ScriptDataMap _           -> cover 10 True "is script data map"
+          ScriptDataConstructor _ _ -> cover 10 True "is script data constructor"
+      $ True
+    , case dat of
+          ScriptDataNumber n        ->
+              genScriptDataNumberCoverage n
+          ScriptDataBytes bs        ->
+              genScriptDataBytesCoverage bs
+          ScriptDataList ss          ->
+              genScriptDataListCoverage ss
+          ScriptDataMap ss           ->
+              genScriptDataMapCoverage ss
+          ScriptDataConstructor n ss ->
+              genScriptDataConstructorCoverage (n, ss)
+    ]
+
+instance Arbitrary ScriptData where
+    arbitrary = genScriptData
+
+genExecutionUnitsCoverage :: ExecutionUnits -> Property
+genExecutionUnitsCoverage (ExecutionUnits steps mem) = conjoin
+    [ unsignedCoverage (Proxy @Word32) "execution steps" steps
+    , unsignedCoverage (Proxy @Word32) "execution mem" mem
+    ]
+
+instance Arbitrary ExecutionUnits where
+    arbitrary = genExecutionUnits
 
 -- | Provide coverage for an unsigned number.
 unsignedCoverage
